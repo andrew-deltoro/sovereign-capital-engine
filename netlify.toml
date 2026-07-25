@@ -1,0 +1,10 @@
+[build]
+  environment = { NODE_VERSION = "20" }
+
+[functions]
+  directory = "netlify/functions"
+
+[dev]
+  framework = "#static"
+  publish = "."
+  functions = "netlify/functions"

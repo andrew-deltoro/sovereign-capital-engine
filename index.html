@@ -1,0 +1,1145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sovereign Capital Engine — TradingView Edition</title>
+  <style>
+    :root {
+      --bg: #060b13;
+      --card: #0d1828;
+      --border: #203350;
+      --text: #e8f0fb;
+      --muted: #94a8c7;
+      --green: #22c55e;
+      --blue: #38bdf8;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --purple: #a78bfa;
+      --accent: #2563eb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #04070d, #060b13);
+      color: var(--text);
+    }
+
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin: 0 0 18px;
+      line-height: 1.5;
+    }
+
+    .warning {
+      background: rgba(234, 179, 8, 0.08);
+      border: 1px solid rgba(234, 179, 8, 0.35);
+      color: #fde68a;
+      padding: 12px 14px;
+      border-radius: 12px;
+      margin-bottom: 18px;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 18px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      margin-top: 6px;
+      background: #07101d;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      outline: none;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #172942;
+    }
+
+    button.danger {
+      background: #7f1d1d;
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .status {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    .status.error {
+      color: #fca5a5;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 1250px;
+    }
+
+    th,
+    td {
+      padding: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      white-space: nowrap;
+    }
+
+    th {
+      text-align: left;
+      color: var(--muted);
+    }
+
+    .right {
+      text-align: right;
+    }
+
+    .long {
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .short {
+      color: var(--red);
+      font-weight: 800;
+    }
+
+    .watch {
+      color: var(--yellow);
+      font-weight: 800;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      border: 1px solid var(--border);
+      background: #0a1422;
+      color: var(--muted);
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    .chart-wrap {
+      height: 680px;
+    }
+
+    .widget-wrap {
+      min-height: 560px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Sovereign Capital Engine — TradingView Edition</h1>
+    <p class="subtitle">
+      TradingView-powered research dashboard with live webhook signals, manual signal capture,
+      position sizing, and trade journal.
+    </p>
+
+    <div class="warning">
+      Educational research tool. Not financial advice. No guarantee of profit.
+      With a $1,000 account and 1% risk, your max loss per trade is $10.
+      Use small size, stops, and avoid illiquid penny stocks.
+    </div>
+
+    <div class="card">
+      <h2>Capital and Risk</h2>
+
+      <div class="grid">
+        <label>
+          Capital ($)
+          <input id="capital" type="number" value="1000" step="100" />
+        </label>
+
+        <label>
+          Risk per idea (%)
+          <input id="risk" type="number" value="1" step="0.05" />
+        </label>
+
+        <label>
+          Default asset class
+          <select id="defaultAssetClass">
+            <option value="stock">Stock</option>
+            <option value="etf">ETF</option>
+            <option value="crypto">Crypto</option>
+            <option value="bond">Bond</option>
+            <option value="penny">Penny</option>
+            <option value="forex">Forex</option>
+            <option value="commodity">Commodity</option>
+          </select>
+        </label>
+
+        <label>
+          Default direction
+          <select id="defaultDirection">
+            <option value="long">Long</option>
+            <option value="short">Short</option>
+            <option value="watch">Watch</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="small">
+        Risk budget:
+        <span class="pill" id="riskBudgetPill">$10 per trade</span>
+        <span class="pill">Stocks/ETFs max $200 notional</span>
+        <span class="pill">Crypto max $100 notional</span>
+        <span class="pill">Penny max $50 notional</span>
+        <span class="pill">Forex/commodity max $100 notional</span>
+        <span class="pill">Bonds max $300 notional</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Live TradingView Signals</h2>
+
+      <div class="buttons">
+        <button id="refreshLiveBtn" class="secondary">Refresh Live Signals</button>
+      </div>
+
+      <div id="liveStatus" class="status">Waiting for live signals...</div>
+
+      <div class="table-wrap" style="margin-top: 12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Symbol</th>
+              <th>Exchange</th>
+              <th>Interval</th>
+              <th>Asset</th>
+              <th class="right">Price</th>
+              <th class="right">Stop</th>
+              <th class="right">Qty</th>
+              <th class="right">Notional</th>
+              <th class="right">% Capital</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="liveSignalsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="small" style="margin-top: 12px;">
+        Live signals are stored on Netlify and refreshed automatically every 20 seconds.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Market Command Center</h2>
+
+      <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+          {
+            "symbols": [
+              {"proName": "SPY", "title": "S&P 500 ETF"},
+              {"proName": "QQQ", "title": "Nasdaq 100 ETF"},
+              {"proName": "IWM", "title": "Russell 2000 ETF"},
+              {"proName": "TVC:US10Y", "title": "US 10Y Yield"},
+              {"proName": "FX_IDC:USDINDEX", "title": "US Dollar Index"},
+              {"proName": "BITSTAMP:BTCUSD", "title": "Bitcoin"},
+              {"proName": "BITSTAMP:ETHUSD", "title": "Ethereum"},
+              {"proName": "GLD", "title": "Gold ETF"}
+            ],
+            "colorTheme": "dark",
+            "isTransparent": true,
+            "displayMode": "adaptive",
+            "locale": "en"
+          }
+        </script>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Technical Analysis</h2>
+
+      <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+          {
+            "interval": "1D",
+            "width": "100%",
+            "isTransparent": true,
+            "height": "480",
+            "symbol": "SPY",
+            "showIntervalTabs": true,
+            "locale": "en",
+            "colorTheme": "dark"
+          }
+        </script>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>TradingView Screener</h2>
+
+      <div class="widget-wrap">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-screener.js" async>
+            {
+              "width": "100%",
+              "height": 560,
+              "defaultMarket": "america",
+              "showToolbar": true,
+              "locale": "en",
+              "colorTheme": "dark",
+              "isTransparent": true
+            }
+          </script>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Advanced Chart</h2>
+
+      <div class="chart-wrap">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+            {
+              "autosize": true,
+              "symbol": "SPY",
+              "interval": "D",
+              "timezone": "Etc/UTC",
+              "theme": "dark",
+              "style": "1",
+              "locale": "en",
+              "enable_publishing": false,
+              "hide_side_toolbar": false,
+              "allow_symbol_change": true,
+              "calendar": false,
+              "support_host": "https://www.tradingview.com"
+            }
+          </script>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Manual Signal Inbox</h2>
+
+      <div class="grid">
+        <label>
+          Symbol
+          <input id="signalSymbol" placeholder="AAPL, BTCUSD, TLT, NVDA" />
+        </label>
+
+        <label>
+          Asset class
+          <select id="signalAssetClass">
+            <option value="stock">Stock</option>
+            <option value="etf">ETF</option>
+            <option value="crypto">Crypto</option>
+            <option value="bond">Bond</option>
+            <option value="penny">Penny</option>
+            <option value="forex">Forex</option>
+            <option value="commodity">Commodity</option>
+          </select>
+        </label>
+
+        <label>
+          Direction
+          <select id="signalDirection">
+            <option value="long">Long</option>
+            <option value="short">Short</option>
+            <option value="watch">Watch</option>
+          </select>
+        </label>
+
+        <label>
+          Conviction score (0-100)
+          <input id="signalScore" type="number" value="70" min="0" max="100" />
+        </label>
+
+        <label>
+          Entry price
+          <input id="signalEntry" type="number" step="any" placeholder="0.00" />
+        </label>
+
+        <label>
+          Stop price
+          <input id="signalStop" type="number" step="any" placeholder="0.00" />
+        </label>
+
+        <label>
+          Target price
+          <input id="signalTarget" type="number" step="any" placeholder="Optional" />
+        </label>
+
+        <label>
+          Catalyst / reason
+          <input id="signalReason" placeholder="Breakout, earnings, sector strength, narrative" />
+        </label>
+      </div>
+
+      <div class="grid">
+        <label>
+          Notes
+          <textarea id="signalNotes" placeholder="What would invalidate this? What confirms it?"></textarea>
+        </label>
+      </div>
+
+      <div class="buttons">
+        <button id="calculateBtn" class="secondary">Calculate Position Size</button>
+        <button id="addSignalBtn">Add Signal</button>
+        <button id="exportSignalsBtn" class="secondary">Export Signals CSV</button>
+        <button id="clearSignalsBtn" class="danger">Clear Manual Signals</button>
+      </div>
+
+      <div id="calcStatus" class="status"></div>
+      <div id="signalStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Manual Signal Journal</h2>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Symbol</th>
+              <th>Class</th>
+              <th>Direction</th>
+              <th class="right">Score</th>
+              <th class="right">Entry</th>
+              <th class="right">Stop</th>
+              <th class="right">Target</th>
+              <th class="right">Risk/Unit</th>
+              <th class="right">Qty</th>
+              <th class="right">Notional</th>
+              <th class="right">% Capital</th>
+              <th class="right">R:R</th>
+              <th>Reason</th>
+              <th>Delete</th>
+            </tr>
+          </thead>
+          <tbody id="signalsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var MANUAL_SIGNALS_KEY = "sovereign_tradingview_manual_signals_v1";
+    var SETTINGS_KEY = "sovereign_tradingview_settings_v1";
+
+    function $(id) {
+      return document.getElementById(id);
+    }
+
+    function saveSettings() {
+      var settings = {
+        capital: $("capital").value,
+        risk: $("risk").value,
+        defaultAssetClass: $("defaultAssetClass").value,
+        defaultDirection: $("defaultDirection").value
+      };
+
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      } catch (e) {
+        console.warn("Could not save settings", e);
+      }
+
+      updateRiskBudgetPill();
+    }
+
+    function loadSettings() {
+      try {
+        var raw = localStorage.getItem(SETTINGS_KEY);
+        if (!raw) return;
+
+        var settings = JSON.parse(raw);
+
+        if (settings.capital != null) $("capital").value = settings.capital;
+        if (settings.risk != null) $("risk").value = settings.risk;
+        if (settings.defaultAssetClass != null) $("defaultAssetClass").value = settings.defaultAssetClass;
+        if (settings.defaultDirection != null) $("defaultDirection").value = settings.defaultDirection;
+      } catch (e) {
+        console.warn("Could not load settings", e);
+      }
+
+      updateRiskBudgetPill();
+    }
+
+    function updateRiskBudgetPill() {
+      var capital = parseFloat($("capital").value) || 0;
+      var riskInput = parseFloat($("risk").value) || 0;
+      var riskPct = riskInput / 100;
+      var riskBudget = capital * riskPct;
+
+      $("riskBudgetPill").textContent =
+        "$" + riskBudget.toFixed(2) + " per trade";
+    }
+
+    function loadManualSignals() {
+      try {
+        var raw = localStorage.getItem(MANUAL_SIGNALS_KEY);
+        if (!raw) return [];
+
+        var signals = JSON.parse(raw);
+        if (!Array.isArray(signals)) return [];
+
+        return signals;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveManualSignals(signals) {
+      try {
+        localStorage.setItem(MANUAL_SIGNALS_KEY, JSON.stringify(signals));
+      } catch (e) {
+        console.warn("Could not save manual signals", e);
+      }
+    }
+
+    function fmtNum(x, digits) {
+      if (x == null || !isFinite(x)) return "";
+
+      return Number(x).toLocaleString(undefined, {
+        maximumFractionDigits: digits == null ? 2 : digits
+      });
+    }
+
+    function fmtPrice(x) {
+      if (x == null || !isFinite(x)) return "";
+
+      if (x >= 1000) {
+        return x.toLocaleString(undefined, {
+          maximumFractionDigits: 2
+        });
+      }
+
+      if (x >= 1) return x.toFixed(2);
+      if (x >= 0.01) return x.toFixed(4);
+
+      return Number(x).toPrecision(4);
+    }
+
+    function fmtPct(x) {
+      if (x == null || !isFinite(x)) return "";
+
+      return (x * 100).toFixed(2) + "%";
+    }
+
+    function directionClass(direction) {
+      if (direction === "long") return "long";
+      if (direction === "short") return "short";
+      return "watch";
+    }
+
+    function maxNotionalPct(assetClass) {
+      if (assetClass === "crypto") return 0.10;
+      if (assetClass === "penny") return 0.05;
+      if (assetClass === "forex") return 0.10;
+      if (assetClass === "commodity") return 0.10;
+      if (assetClass === "bond") return 0.30;
+
+      return 0.20;
+    }
+
+    function parseRequiredPrice(value) {
+      var n = Number(value);
+
+      if (isFinite(n) && n > 0) {
+        return n;
+      }
+
+      return NaN;
+    }
+
+    function parseOptionalPrice(value) {
+      if (value == null || String(value).trim() === "") {
+        return NaN;
+      }
+
+      var n = Number(value);
+
+      if (isFinite(n) && n > 0) {
+        return n;
+      }
+
+      return NaN;
+    }
+
+    function computePosition(entry, stop, target, assetClass) {
+      var capital = parseFloat($("capital").value) || 0;
+      var riskInput = parseFloat($("risk").value) || 0;
+      var riskPct = riskInput / 100;
+
+      entry = parseRequiredPrice(entry);
+      stop = parseRequiredPrice(stop);
+      target = parseOptionalPrice(target);
+
+      if (!isFinite(entry)) {
+        return {
+          ok: false,
+          message: "Enter a valid entry price."
+        };
+      }
+
+      if (!isFinite(stop)) {
+        return {
+          ok: false,
+          message: "Enter a valid stop price."
+        };
+      }
+
+      var riskPerUnit = Math.abs(entry - stop);
+
+      if (riskPerUnit <= 0) {
+        return {
+          ok: false,
+          message: "Stop must be different from entry."
+        };
+      }
+
+      var riskBudget = capital * riskPct;
+      var qty = riskBudget / riskPerUnit;
+      var notional = qty * entry;
+
+      var capPct = maxNotionalPct(assetClass);
+      var maxNotional = capital * capPct;
+      var capped = false;
+
+      if (notional > maxNotional) {
+        notional = maxNotional;
+        qty = notional / entry;
+        capped = true;
+      }
+
+      var pctCapital = capital > 0 ? notional / capital : 0;
+
+      var rr = NaN;
+
+      if (isFinite(target)) {
+        var rewardPerUnit = Math.abs(target - entry);
+        rr = rewardPerUnit / riskPerUnit;
+      }
+
+      return {
+        ok: true,
+        capital: capital,
+        riskPct: riskPct,
+        riskBudget: riskBudget,
+        entry: entry,
+        stop: stop,
+        target: isFinite(target) ? target : null,
+        riskPerUnit: riskPerUnit,
+        qty: qty,
+        notional: notional,
+        pctCapital: pctCapital,
+        rr: rr,
+        capped: capped
+      };
+    }
+
+    function showCalcStatus() {
+      var result = computePosition(
+        $("signalEntry").value,
+        $("signalStop").value,
+        $("signalTarget").value,
+        $("signalAssetClass").value
+      );
+
+      var el = $("calcStatus");
+
+      if (!result.ok) {
+        el.className = "status error";
+        el.textContent = result.message;
+        return null;
+      }
+
+      el.className = "status";
+
+      el.textContent =
+        "Risk budget: $" + fmtNum(result.riskBudget, 2) +
+        " | Risk/unit: " + fmtPrice(result.riskPerUnit) +
+        " | Qty: " + fmtNum(result.qty, 6) +
+        " | Notional: $" + fmtNum(result.notional, 2) +
+        " | % capital: " + fmtPct(result.pctCapital) +
+        (result.capped ? " | CAPPED by asset exposure limit" : "") +
+        (isFinite(result.rr) ? " | R:R: " + fmtNum(result.rr, 2) : "");
+
+      return result;
+    }
+
+    function addManualSignal() {
+      var symbol = $("signalSymbol").value.trim().toUpperCase();
+
+      if (!symbol) {
+        $("signalStatus").className = "status error";
+        $("signalStatus").textContent = "Enter a symbol.";
+        return;
+      }
+
+      var calc = computePosition(
+        $("signalEntry").value,
+        $("signalStop").value,
+        $("signalTarget").value,
+        $("signalAssetClass").value
+      );
+
+      if (!calc.ok) {
+        $("signalStatus").className = "status error";
+        $("signalStatus").textContent = calc.message;
+        return;
+      }
+
+      var signal = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        time: new Date().toISOString(),
+        symbol: symbol,
+        assetClass: $("signalAssetClass").value,
+        direction: $("signalDirection").value,
+        score: parseFloat($("signalScore").value) || 0,
+        entry: calc.entry,
+        stop: calc.stop,
+        target: calc.target,
+        riskPerUnit: calc.riskPerUnit,
+        qty: calc.qty,
+        notional: calc.notional,
+        pctCapital: calc.pctCapital,
+        rr: calc.rr,
+        reason: $("signalReason").value.trim(),
+        notes: $("signalNotes").value.trim()
+      };
+
+      var signals = loadManualSignals();
+      signals.unshift(signal);
+
+      saveManualSignals(signals);
+      renderManualSignals();
+
+      $("signalStatus").className = "status";
+      $("signalStatus").textContent = "Manual signal added: " + symbol;
+
+      $("signalSymbol").value = "";
+      $("signalEntry").value = "";
+      $("signalStop").value = "";
+      $("signalTarget").value = "";
+      $("signalReason").value = "";
+      $("signalNotes").value = "";
+      $("calcStatus").textContent = "";
+    }
+
+    function deleteManualSignal(id) {
+      var signals = loadManualSignals().filter(function (signal) {
+        return signal.id !== id;
+      });
+
+      saveManualSignals(signals);
+      renderManualSignals();
+    }
+
+    function clearManualSignals() {
+      var confirmed = window.confirm("Clear all manual signals stored in this browser?");
+
+      if (!confirmed) return;
+
+      saveManualSignals([]);
+      renderManualSignals();
+    }
+
+    function renderManualSignals() {
+      var tbody = $("signalsBody");
+      tbody.innerHTML = "";
+
+      var signals = loadManualSignals();
+
+      if (!signals.length) {
+        var emptyRow = document.createElement("tr");
+        var emptyCell = document.createElement("td");
+
+        emptyCell.colSpan = 15;
+        emptyCell.textContent = "No manual signals yet.";
+        emptyCell.style.color = "#94a8c7";
+
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
+
+        return;
+      }
+
+      for (var i = 0; i < signals.length; i++) {
+        var signal = signals[i];
+
+        var tr = document.createElement("tr");
+
+        var cells = [
+          new Date(signal.time).toLocaleString(),
+          signal.symbol,
+          signal.assetClass,
+          signal.direction,
+          fmtNum(signal.score, 0),
+          fmtPrice(signal.entry),
+          fmtPrice(signal.stop),
+          fmtPrice(signal.target),
+          fmtPrice(signal.riskPerUnit),
+          fmtNum(signal.qty, 6),
+          fmtNum(signal.notional, 2),
+          fmtPct(signal.pctCapital),
+          isFinite(signal.rr) ? fmtNum(signal.rr, 2) : "",
+          signal.reason || ""
+        ];
+
+        for (var c = 0; c < cells.length; c++) {
+          var td = document.createElement("td");
+          td.textContent = cells[c];
+
+          if (c >= 4 && c <= 12) {
+            td.className = "right";
+          }
+
+          if (c === 3) {
+            td.className = directionClass(signal.direction);
+          }
+
+          tr.appendChild(td);
+        }
+
+        var deleteTd = document.createElement("td");
+        var deleteBtn = document.createElement("button");
+
+        deleteBtn.textContent = "Delete";
+        deleteBtn.className = "danger";
+        deleteBtn.setAttribute("data-id", signal.id);
+
+        deleteBtn.addEventListener("click", function () {
+          deleteManualSignal(this.getAttribute("data-id"));
+        });
+
+        deleteTd.appendChild(deleteBtn);
+        tr.appendChild(deleteTd);
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    function csvEscape(value) {
+      if (value == null) return "";
+
+      var s = String(value);
+
+      if (/[",\n]/.test(s)) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+
+      return s;
+    }
+
+    function exportManualSignals() {
+      var signals = loadManualSignals();
+
+      if (!signals.length) {
+        $("signalStatus").className = "status error";
+        $("signalStatus").textContent = "No manual signals to export.";
+        return;
+      }
+
+      var headers = [
+        "time",
+        "symbol",
+        "assetClass",
+        "direction",
+        "score",
+        "entry",
+        "stop",
+        "target",
+        "riskPerUnit",
+        "qty",
+        "notional",
+        "pctCapital",
+        "rr",
+        "reason",
+        "notes"
+      ];
+
+      var lines = [headers.join(",")];
+
+      for (var i = 0; i < signals.length; i++) {
+        var signal = signals[i];
+
+        var line = headers
+          .map(function (header) {
+            return csvEscape(signal[header]);
+          })
+          .join(",");
+
+        lines.push(line);
+      }
+
+      var csv = lines.join("\n");
+
+      var blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      var url = URL.createObjectURL(blob);
+
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "sovereign_tradingview_manual_signals.csv";
+      a.click();
+
+      URL.revokeObjectURL(url);
+
+      $("signalStatus").className = "status";
+      $("signalStatus").textContent = "Manual signals exported.";
+    }
+
+    function inferAssetClass(signal) {
+      var symbol = String(signal.symbol || "").toUpperCase();
+      var exchange = String(signal.exchange || "").toUpperCase();
+
+      if (signal.asset_class) {
+        return signal.asset_class;
+      }
+
+      if (
+        exchange === "BINANCE" ||
+        exchange === "COINBASE" ||
+        exchange === "KRAKEN" ||
+        exchange === "BITSTAMP" ||
+        symbol.indexOf("USD") !== -1
+      ) {
+        return "crypto";
+      }
+
+      var bonds = ["TLT", "IEF", "BND", "AGG", "HYG", "LQD", "SHY", "GOVT", "SGOV", "TIP"];
+
+      if (bonds.indexOf(symbol) !== -1) {
+        return "bond";
+      }
+
+      var commodities = ["GLD", "SLV", "USO", "CPER", "XAUUSD", "XAGUSD"];
+
+      if (commodities.indexOf(symbol) !== -1) {
+        return "commodity";
+      }
+
+      var forex = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "UUP"];
+
+      if (forex.indexOf(symbol) !== -1) {
+        return "forex";
+      }
+
+      return "stock";
+    }
+
+    async function refreshLiveSignals() {
+      var status = $("liveStatus");
+
+      try {
+        var res = await fetch("/.netlify/functions/signals?limit=200");
+
+        if (!res.ok) {
+          throw new Error("HTTP " + res.status);
+        }
+
+        var data = await res.json();
+
+        var signals = Array.isArray(data.signals) ? data.signals : [];
+
+        renderLiveSignals(signals);
+
+        status.className = "status";
+        status.textContent =
+          "Live signals updated: " +
+          new Date().toLocaleTimeString() +
+          " | " +
+          signals.length +
+          " signals stored.";
+      } catch (error) {
+        status.className = "status error";
+        status.textContent =
+          "Live signal fetch failed: " +
+          error.message +
+          ". Make sure signals.js is deployed.";
+      }
+    }
+
+    function renderLiveSignals(signals) {
+      var tbody = $("liveSignalsBody");
+      tbody.innerHTML = "";
+
+      if (!signals.length) {
+        var emptyRow = document.createElement("tr");
+        var emptyCell = document.createElement("td");
+
+        emptyCell.colSpan = 11;
+        emptyCell.textContent = "No live TradingView signals yet.";
+        emptyCell.style.color = "#94a8c7";
+
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
+
+        return;
+      }
+
+      for (var i = 0; i < signals.length; i++) {
+        var signal = signals[i];
+
+        var assetClass = inferAssetClass(signal);
+
+        var calc = null;
+
+        if (isFinite(signal.price) && isFinite(signal.stop)) {
+          calc = computePosition(
+            signal.price,
+            signal.stop,
+            signal.target,
+            assetClass
+          );
+        }
+
+        var tr = document.createElement("tr");
+
+        var cells = [
+          signal.received_at ? new Date(signal.received_at).toLocaleString() : "",
+          signal.symbol || "",
+          signal.exchange || "",
+          signal.interval || "",
+          assetClass,
+          fmtPrice(signal.price),
+          fmtPrice(signal.stop),
+          calc && calc.ok ? fmtNum(calc.qty, 6) : "",
+          calc && calc.ok ? fmtNum(calc.notional, 2) : "",
+          calc && calc.ok ? fmtPct(calc.pctCapital) : "",
+          signal.message || ""
+        ];
+
+        for (var c = 0; c < cells.length; c++) {
+          var td = document.createElement("td");
+          td.textContent = cells[c];
+
+          if (c >= 5 && c <= 9) {
+            td.className = "right";
+          }
+
+          tr.appendChild(td);
+        }
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    $("capital").addEventListener("change", saveSettings);
+    $("risk").addEventListener("change", saveSettings);
+
+    $("defaultAssetClass").addEventListener("change", function () {
+      saveSettings();
+      $("signalAssetClass").value = $("defaultAssetClass").value;
+    });
+
+    $("defaultDirection").addEventListener("change", function () {
+      saveSettings();
+      $("signalDirection").value = $("defaultDirection").value;
+    });
+
+    $("calculateBtn").addEventListener("click", showCalcStatus);
+    $("addSignalBtn").addEventListener("click", addManualSignal);
+    $("exportSignalsBtn").addEventListener("click", exportManualSignals);
+    $("clearSignalsBtn").addEventListener("click", clearManualSignals);
+    $("refreshLiveBtn").addEventListener("click", refreshLiveSignals);
+
+    loadSettings();
+
+    $("signalAssetClass").value = $("defaultAssetClass").value;
+    $("signalDirection").value = $("defaultDirection").value;
+
+    renderManualSignals();
+    refreshLiveSignals();
+
+    setInterval(refreshLiveSignals, 20000);
+  </script>
+</body>
+</html>

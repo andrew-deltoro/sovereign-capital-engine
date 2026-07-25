@@ -1,0 +1,9 @@
+{
+  "name": "sovereign-capital-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Netlify Functions for the Sovereign Capital Engine dashboard",
+  "dependencies": {
+    "@netlify/blobs": "^8.0.0"
+  }
+}
