@@ -47,6 +47,24 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
+/**
+ * Opens the blob store, falling back to explicit credentials when Netlify
+ * does not inject the Blobs environment automatically.
+ */
+function openStore() {
+  const siteID = process.env.BLOBS_SITE_ID || process.env.SITE_ID;
+  const token = process.env.BLOBS_TOKEN || process.env.NETLIFY_API_TOKEN;
+
+  const options = { name: STORE_NAME, consistency: "strong" };
+
+  if (siteID && token) {
+    options.siteID = siteID;
+    options.token = token;
+  }
+
+  return getStore(options);
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: corsHeaders(), body: "" };
@@ -91,7 +109,7 @@ exports.handler = async (event) => {
   };
 
   try {
-    const store = getStore({ name: STORE_NAME, consistency: "strong" });
+    const store = openStore();
 
     const existing = (await store.get(SIGNALS_KEY, { type: "json" })) || [];
     const signals = Array.isArray(existing) ? existing : [];
@@ -104,7 +122,8 @@ exports.handler = async (event) => {
 
     await store.setJSON(SIGNALS_KEY, signals);
   } catch (error) {
-    return json(502, { error: "Failed to store signal" });
+    console.error("TV webhook store error:", error);
+    return json(502, { error: "Failed to store signal", detail: String(error) });
   }
 
   return json(200, { ok: true, id: signal.id });
