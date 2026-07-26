@@ -41,10 +41,11 @@ exports.handler = async (event) => {
       body: JSON.stringify({ signals: Array.isArray(signals) ? signals : [] })
     };
   } catch (error) {
+    console.error("Signals function error:", error);
     return {
       statusCode: 502,
       headers: { ...corsHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Failed to read signals" })
+      body: JSON.stringify({ error: "Failed to read signals", detail: String(error) })
     };
   }
 };
