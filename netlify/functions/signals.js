@@ -18,6 +18,28 @@ function corsHeaders() {
   };
 }
 
+/**
+ * Opens the blob store.
+ *
+ * Netlify normally injects Blobs credentials automatically. When that
+ * injection does not happen, `getStore` throws MissingBlobsEnvironmentError,
+ * so we fall back to explicit credentials supplied through environment
+ * variables.
+ */
+function openStore() {
+  const siteID = process.env.BLOBS_SITE_ID || process.env.SITE_ID;
+  const token = process.env.BLOBS_TOKEN || process.env.NETLIFY_API_TOKEN;
+
+  const options = { name: STORE_NAME, consistency: "strong" };
+
+  if (siteID && token) {
+    options.siteID = siteID;
+    options.token = token;
+  }
+
+  return getStore(options);
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: corsHeaders(), body: "" };
@@ -32,7 +54,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const store = getStore({ name: STORE_NAME, consistency: "strong" });
+    const store = openStore();
     const signals = (await store.get(SIGNALS_KEY, { type: "json" })) || [];
 
     return {
@@ -42,10 +64,14 @@ exports.handler = async (event) => {
     };
   } catch (error) {
     console.error("Signals function error:", error);
+
     return {
       statusCode: 502,
       headers: { ...corsHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Failed to read signals", detail: String(error) })
+      body: JSON.stringify({
+        error: "Failed to read signals",
+        detail: String(error)
+      })
     };
   }
 };
