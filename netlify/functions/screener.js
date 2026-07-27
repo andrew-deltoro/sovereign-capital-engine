@@ -40,10 +40,67 @@ const CLASS_FLOORS = {
 
 const MIN_HISTORY_DAYS = 60;
 
-// "Strong Watch" requires a high score AND liquidity that is genuinely fine,
-// not merely above the floor. Both conditions must hold.
+// "Strong Watch" requires THREE things, all of which must hold:
+//
+//   1. Score of 75 or higher
+//   2. Enough liquidity (not merely above the universe floor)
+//   3. No special risk rule triggered
+//
+// The third condition exists because a weighted score can be gamed by its own
+// arithmetic: a stock or coin in a violent run earns more in momentum than the
+// risk bucket can ever deduct, so without a hard blocker the model would flag
+// exactly the setups the risk bucket was meant to catch. Blockers are absolute
+// — they do not subtract points, they withhold the label.
 const STRONG_WATCH_SCORE = 75;
 const STRONG_WATCH_MIN_LIQUIDITY_POINTS = 12; // out of 20
+
+// Per-class blocker thresholds for equities.
+const EQUITY_BLOCKERS = {
+  stock: { maxRsi: 78, maxRun20d: 40, maxAtrPct: 7, maxDrawdown: 25 },
+  bond: { maxRsi: 80, maxRun20d: 12, maxAtrPct: 1.8, maxDrawdown: 20 },
+  penny: { maxRsi: 80, maxRun20d: 100, maxAtrPct: 18, maxDrawdown: 50 }
+};
+
+/**
+ * Returns the list of special risk rules an equity-like asset trips. An empty
+ * array means nothing is blocking the Strong Watch label.
+ */
+function equityBlockers(assetClass, metrics) {
+  const limits = EQUITY_BLOCKERS[assetClass] || EQUITY_BLOCKERS.stock;
+  const blockers = [];
+
+  if (isFinite(metrics.rsi14) && metrics.rsi14 > limits.maxRsi) {
+    blockers.push("RSI " + metrics.rsi14.toFixed(0) + " overbought (>" + limits.maxRsi + ")");
+  }
+
+  if (isFinite(metrics.mom20) && metrics.mom20 > limits.maxRun20d) {
+    blockers.push(
+      "parabolic: +" + metrics.mom20.toFixed(0) + "% in 20d (>" + limits.maxRun20d + "%)"
+    );
+  }
+
+  if (isFinite(metrics.atrPct) && metrics.atrPct > limits.maxAtrPct) {
+    blockers.push(
+      "volatility ATR " + metrics.atrPct.toFixed(1) + "% (>" + limits.maxAtrPct + "%)"
+    );
+  }
+
+  const drawdown = Math.abs(metrics.drawdownFromHigh);
+
+  if (isFinite(drawdown) && drawdown > limits.maxDrawdown) {
+    blockers.push(
+      "drawdown " + drawdown.toFixed(0) + "% from high (>" + limits.maxDrawdown + "%)"
+    );
+  }
+
+  // A name below its 200-day average is not in the kind of trend the label is
+  // meant to describe, however well the other buckets score.
+  if (metrics.hasLongHistory && !metrics.aboveSma200) {
+    blockers.push("below 200-day average");
+  }
+
+  return blockers;
+}
 
 // Bond ETFs are structurally low-volatility, so they would sweep the risk
 // bucket if scored on the same ATR scale as equities.
@@ -429,7 +486,7 @@ function scoreEquityLike(assetClass, metrics) {
   };
 }
 
-function analyze(symbol, candles) {
+function analyze(symbol, candles, context) {
   const closes = candles.c;
   const highs = candles.h;
   const lows = candles.l;
@@ -526,9 +583,86 @@ function analyze(symbol, candles) {
     avgDollarVolume, rsi14, atrPct, drawdownFromHigh
   });
 
-  // Strong Watch needs BOTH a high total and genuinely acceptable liquidity.
+  // ---- context factors: these gate the label, they do not change the score ----
+
+  context = context || {};
+  const benchmarkCloses = context.benchmarkCloses;
+
+  const rs20 = relativeStrength(closes, benchmarkCloses, 20);
+  const rs60 = relativeStrength(closes, benchmarkCloses, 60);
+
+  // Risk-adjusted momentum: 60-day return per unit of daily volatility. A 20%
+  // move in a name that swings 8% a day is far less meaningful than the same
+  // move in one that swings 1.5%.
+  const riskAdjMomentum = isFinite(mom60) && isFinite(atrPct) && atrPct > 0
+    ? mom60 / atrPct
+    : NaN;
+
+  const volQuality = volumeQuality(volumes);
+
+  // Sector strength, measured on the sector ETF rather than the stock.
+  const sectorSymbol = SECTOR_MAP[symbol] || null;
+  let sector = null;
+
+  if (sectorSymbol && context.sectorMomentum &&
+      context.sectorMomentum[sectorSymbol] !== undefined) {
+    sector = {
+      symbol: sectorSymbol,
+      mom60: context.sectorMomentum[sectorSymbol].mom60,
+      rs60: context.sectorMomentum[sectorSymbol].rs60,
+      aboveSma50: context.sectorMomentum[sectorSymbol].aboveSma50
+    };
+  }
+
+  // Strong Watch = score >= 75 AND enough liquidity AND no blocking risk rule.
   const liquidityOk = buckets.liquidity >= STRONG_WATCH_MIN_LIQUIDITY_POINTS;
-  const strongWatch = buckets.total >= STRONG_WATCH_SCORE && liquidityOk;
+
+  const blockers = equityBlockers(assetClass, {
+    rsi14,
+    mom20,
+    atrPct,
+    drawdownFromHigh,
+    hasLongHistory: isFinite(sma200),
+    aboveSma200: isFinite(sma200) && price > sma200
+  });
+
+  // ---- context blockers ----
+
+  // Relative strength. Benchmarks and sector ETFs are exempt: SPY cannot
+  // meaningfully underperform itself, and sector ETFs are the yardstick.
+  const isBenchmarkLike =
+    symbol === BENCHMARK || Object.values(SECTOR_MAP).indexOf(symbol) !== -1 ||
+    ["QQQ", "IWM", "DIA"].indexOf(symbol) !== -1;
+
+  if (!isBenchmarkLike && isFinite(rs60) && rs60 < 0) {
+    blockers.push(
+      "lagging " + BENCHMARK + " by " + Math.abs(rs60).toFixed(1) + "% over 60d"
+    );
+  }
+
+  if (sector && sector.aboveSma50 === false) {
+    blockers.push("sector " + sector.symbol + " below its 50-day average");
+  }
+
+  if (!volQuality.ok) {
+    blockers.push(volQuality.note);
+  }
+
+  // Risk-adjusted momentum: a positive raw return that vanishes once the
+  // asset's own volatility is accounted for is not a trend worth flagging.
+  if (assetClass !== "bond" && isFinite(riskAdjMomentum) && riskAdjMomentum < 1.5) {
+    blockers.push(
+      "risk-adjusted momentum " + riskAdjMomentum.toFixed(1) + " (needs 1.5+)"
+    );
+  }
+
+  // Macro regime applies to every equity-like row at once.
+  if (context.regime && context.regime.state === "risk-off") {
+    blockers.push("risk-off regime: " + context.regime.reason);
+  }
+
+  const scoreOk = buckets.total >= STRONG_WATCH_SCORE;
+  const strongWatch = scoreOk && liquidityOk && blockers.length === 0;
 
   const suggestedStop = isFinite(atr14) ? price - atr14 * 2 : NaN;
 
@@ -552,7 +686,18 @@ function analyze(symbol, candles) {
     rsi14: round(rsi14, 1),
     suggestedStop: isFinite(suggestedStop) ? round(suggestedStop, 2) : null,
     stackedBullish,
+    rs20: round(rs20, 2),
+    rs60: round(rs60, 2),
+    riskAdjMomentum: round(riskAdjMomentum, 2),
+    volumeTrend: volQuality.trend,
+    volumeConcentration: volQuality.concentration,
+    volumeQualityOk: volQuality.ok,
+    sector: sector ? sector.symbol : null,
+    sectorRs60: sector ? sector.rs60 : null,
+    sectorAboveSma50: sector ? sector.aboveSma50 : null,
     liquidityOk,
+    scoreOk,
+    blockers,
     strongWatch,
     components: buckets,
     score: buckets.total
@@ -563,6 +708,174 @@ function round(value, places) {
   if (!isFinite(value)) return null;
   const factor = Math.pow(10, places);
   return Math.round(value * factor) / factor;
+}
+
+// ------------------------------------------------- market context & factors
+//
+// These do NOT change the 100-point score. They are additional conditions on
+// the Strong Watch label, which keeps the scoring spec intact while letting
+// context veto a label the raw numbers would otherwise award.
+
+const BENCHMARK = "SPY";
+
+// Sector mapping for the curated universe. A real system would pull this from
+// a fundamentals endpoint; hardcoding is honest at this universe size.
+const SECTOR_MAP = {
+  AAPL: "XLK", MSFT: "XLK", NVDA: "XLK", AVGO: "XLK", AMD: "XLK", MU: "XLK",
+  INTC: "XLK", QCOM: "XLK", TXN: "XLK", ARM: "XLK", SMCI: "XLK",
+  GOOGL: "XLC", META: "XLC", NFLX: "XLC",
+  AMZN: "XLY", TSLA: "XLY", HD: "XLY", NKE: "XLY", MCD: "XLY", UBER: "XLY",
+  JPM: "XLF", BAC: "XLF", GS: "XLF", MS: "XLF", V: "XLF", MA: "XLF",
+  COIN: "XLF", HOOD: "XLF",
+  UNH: "XLV", LLY: "XLV", JNJ: "XLV", PFE: "XLV", ABBV: "XLV",
+  WMT: "XLP", COST: "XLP",
+  BA: "XLI", CAT: "XLI", GE: "XLI",
+  XOM: "XLE", CVX: "XLE", OXY: "XLE"
+};
+
+/**
+ * Determines the market-wide risk regime from the benchmark and credit spreads.
+ *
+ * This is deliberately crude. A real regime model would use VIX term structure,
+ * credit spreads and liquidity measures; what is available here is price action
+ * on SPY, HYG and TLT. It answers one question — is this a market where trend
+ * following tends to work — and nothing more.
+ */
+function computeRegime(seriesBySymbol) {
+  const spy = seriesBySymbol[BENCHMARK];
+
+  if (!spy || !Array.isArray(spy.c) || spy.c.length < 200) {
+    return { state: "unknown", reason: "insufficient benchmark history", riskOn: true };
+  }
+
+  const closes = spy.c;
+  const price = closes[closes.length - 1];
+  const spySma50 = sma(closes, 50);
+  const spySma200 = sma(closes, 200);
+
+  const aboveSma200 = price > spySma200;
+  const aboveSma50 = price > spySma50;
+
+  // Benchmark drawdown from its 52-week high.
+  const window = closes.slice(-252);
+  const high = Math.max(...window);
+  const drawdown = ((price - high) / high) * 100;
+
+  // Benchmark volatility as a stress read.
+  const spyAtr = atr(spy.h, spy.l, closes, 14);
+  const spyAtrPct = isFinite(spyAtr) ? (spyAtr / price) * 100 : NaN;
+
+  // Credit appetite: high yield versus treasuries over 60 sessions. When
+  // investors prefer treasuries to junk, risk appetite is contracting.
+  let creditRatio = null;
+  const hyg = seriesBySymbol.HYG;
+  const tlt = seriesBySymbol.TLT;
+
+  if (hyg && tlt && hyg.c.length > 61 && tlt.c.length > 61) {
+    const hygRet = (hyg.c[hyg.c.length - 1] / hyg.c[hyg.c.length - 61] - 1) * 100;
+    const tltRet = (tlt.c[tlt.c.length - 1] / tlt.c[tlt.c.length - 61] - 1) * 100;
+    creditRatio = hygRet - tltRet;
+  }
+
+  let state;
+  const reasons = [];
+
+  if (!aboveSma200) {
+    state = "risk-off";
+    reasons.push("SPY below its 200-day average");
+  } else if (!aboveSma50 || drawdown < -8) {
+    state = "caution";
+    if (!aboveSma50) reasons.push("SPY below its 50-day average");
+    if (drawdown < -8) reasons.push("SPY " + Math.abs(drawdown).toFixed(1) + "% off its high");
+  } else {
+    state = "risk-on";
+    reasons.push("SPY above both the 50 and 200-day averages");
+  }
+
+  if (isFinite(spyAtrPct) && spyAtrPct > 2.5) {
+    if (state === "risk-on") state = "caution";
+    reasons.push("benchmark volatility elevated (ATR " + spyAtrPct.toFixed(1) + "%)");
+  }
+
+  if (creditRatio !== null && creditRatio < -3) {
+    if (state === "risk-on") state = "caution";
+    reasons.push("credit weak: HYG lagging TLT by " + Math.abs(creditRatio).toFixed(1) + "% over 60d");
+  }
+
+  return {
+    state,
+    riskOn: state === "risk-on",
+    reason: reasons.join("; "),
+    spyAboveSma200: aboveSma200,
+    spyAboveSma50: aboveSma50,
+    spyDrawdown: round(drawdown, 2),
+    spyAtrPct: round(spyAtrPct, 2),
+    creditSpread60d: creditRatio === null ? null : round(creditRatio, 2)
+  };
+}
+
+/**
+ * Relative strength: excess return over the benchmark. A stock rising 5% while
+ * the index rises 8% is not strong, however good its own chart looks.
+ */
+function relativeStrength(closes, benchmarkCloses, lookback) {
+  if (!closes || !benchmarkCloses) return NaN;
+  if (closes.length <= lookback || benchmarkCloses.length <= lookback) return NaN;
+
+  const assetRet =
+    (closes[closes.length - 1] / closes[closes.length - 1 - lookback] - 1) * 100;
+  const benchRet =
+    (benchmarkCloses[benchmarkCloses.length - 1] /
+      benchmarkCloses[benchmarkCloses.length - 1 - lookback] - 1) * 100;
+
+  return assetRet - benchRet;
+}
+
+/**
+ * Volume quality: is participation genuine, or one spike propping up an average?
+ *
+ * Two checks. First, whether recent volume is holding up against the longer
+ * baseline. Second, whether a single day dominates the 20-day average — a name
+ * whose liquidity depends on one print is not really liquid.
+ */
+function volumeQuality(volumes) {
+  if (!volumes || volumes.length < 60) {
+    return { ok: true, score: null, note: "insufficient volume history" };
+  }
+
+  const recent = volumes.slice(-20);
+  const baseline = volumes.slice(-60, -20);
+
+  const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+  const baselineAvg = baseline.reduce((a, b) => a + b, 0) / baseline.length;
+
+  const trend = baselineAvg > 0 ? recentAvg / baselineAvg : 1;
+
+  // Concentration: the largest single day as a share of the 20-day total.
+  const total = recent.reduce((a, b) => a + b, 0);
+  const largest = Math.max(...recent);
+  const concentration = total > 0 ? largest / total : 0;
+
+  const notes = [];
+  let ok = true;
+
+  if (trend < 0.6) {
+    ok = false;
+    notes.push("volume fading (" + (trend * 100).toFixed(0) + "% of its 60-day baseline)");
+  }
+
+  // One day above 30% of twenty means the other nineteen are thin.
+  if (concentration > 0.3) {
+    ok = false;
+    notes.push("volume concentrated in one session (" + (concentration * 100).toFixed(0) + "%)");
+  }
+
+  return {
+    ok,
+    trend: round(trend, 2),
+    concentration: round(concentration, 3),
+    note: notes.join("; ")
+  };
 }
 
 // ----------------------------------------------------------------- crypto
@@ -578,6 +891,46 @@ function round(value, places) {
 const CRYPTO_MIN_VOLUME = 10000000; // $10M/day
 const CRYPTO_MAX_RANK = 500;
 const CRYPTO_STRONG_WATCH_MIN_LIQUIDITY = 18; // out of 30
+
+// Special risk rules for crypto. Same principle as equities: these withhold
+// the label outright rather than deducting points.
+const CRYPTO_BLOCKERS = {
+  maxRun7d: 50,
+  maxRun30d: 150,
+  maxRange24h: 20,
+  minRank: 250
+};
+
+function cryptoBlockers(metrics) {
+  const blockers = [];
+
+  if (isFinite(metrics.ret7d) && metrics.ret7d > CRYPTO_BLOCKERS.maxRun7d) {
+    blockers.push(
+      "parabolic: +" + metrics.ret7d.toFixed(0) + "% in 7d (>" +
+      CRYPTO_BLOCKERS.maxRun7d + "%)"
+    );
+  }
+
+  if (isFinite(metrics.ret30d) && metrics.ret30d > CRYPTO_BLOCKERS.maxRun30d) {
+    blockers.push(
+      "parabolic: +" + metrics.ret30d.toFixed(0) + "% in 30d (>" +
+      CRYPTO_BLOCKERS.maxRun30d + "%)"
+    );
+  }
+
+  if (isFinite(metrics.range24hPct) && metrics.range24hPct > CRYPTO_BLOCKERS.maxRange24h) {
+    blockers.push(
+      "24h range " + metrics.range24hPct.toFixed(0) + "% (>" +
+      CRYPTO_BLOCKERS.maxRange24h + "%)"
+    );
+  }
+
+  if (isFinite(metrics.marketCapRank) && metrics.marketCapRank > CRYPTO_BLOCKERS.minRank) {
+    blockers.push("rank " + metrics.marketCapRank + " (>" + CRYPTO_BLOCKERS.minRank + ")");
+  }
+
+  return blockers;
+}
 
 // Stablecoins are excluded outright: by design they have no momentum, and a
 // depeg is the only thing that would ever score — which is not a buy signal.
@@ -817,7 +1170,16 @@ function analyzeCrypto(coin) {
   });
 
   const liquidityOk = buckets.liquidity >= CRYPTO_STRONG_WATCH_MIN_LIQUIDITY;
-  const strongWatch = buckets.total >= STRONG_WATCH_SCORE && liquidityOk;
+
+  const blockers = cryptoBlockers({
+    ret7d: isFinite(ret7d) ? ret7d : 0,
+    ret30d: isFinite(ret30d) ? ret30d : 0,
+    range24hPct,
+    marketCapRank
+  });
+
+  const scoreOk = buckets.total >= STRONG_WATCH_SCORE;
+  const strongWatch = scoreOk && liquidityOk && blockers.length === 0;
 
   const suggestedStop =
     isFinite(range24hPct) && isFinite(price)
@@ -840,6 +1202,8 @@ function analyzeCrypto(coin) {
     range24hEstimated: !hasRealRange,
     suggestedStop: isFinite(suggestedStop) ? round(suggestedStop, 6) : null,
     liquidityOk,
+    scoreOk,
+    blockers,
     strongWatch,
     components: buckets,
     score: buckets.total
@@ -892,14 +1256,60 @@ exports.handler = async function (event) {
     ? params.symbols.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
     : DEFAULT_UNIVERSE;
 
-  const rows = await pooledMap(universe, CONCURRENCY, async (symbol) => {
+  // Context symbols must be fetched first: the benchmark defines relative
+  // strength and the regime, and the sector ETFs define sector strength.
+  const sectorSymbols = Array.from(new Set(Object.values(SECTOR_MAP)));
+  const contextSymbols = Array.from(
+    new Set([BENCHMARK, "HYG", "TLT"].concat(sectorSymbols))
+  );
+
+  const seriesBySymbol = {};
+
+  const contextResults = await pooledMap(contextSymbols, CONCURRENCY, async (symbol) => {
     const candles = await fetchCandles(symbol, apiKey);
+    return { symbol, candles };
+  });
+
+  for (const entry of contextResults) {
+    if (entry && entry.candles) {
+      seriesBySymbol[entry.symbol] = entry.candles;
+    }
+  }
+
+  const benchmarkSeries = seriesBySymbol[BENCHMARK];
+  const benchmarkCloses = benchmarkSeries ? benchmarkSeries.c : null;
+
+  const regime = computeRegime(seriesBySymbol);
+
+  // Sector momentum, computed once and shared across every row in that sector.
+  const sectorMomentum = {};
+
+  for (const sectorSymbol of sectorSymbols) {
+    const series = seriesBySymbol[sectorSymbol];
+
+    if (!series || !Array.isArray(series.c) || series.c.length < 61) continue;
+
+    const closes = series.c;
+    const last = closes[closes.length - 1];
+
+    sectorMomentum[sectorSymbol] = {
+      mom60: round((last / closes[closes.length - 61] - 1) * 100, 2),
+      rs60: round(relativeStrength(closes, benchmarkCloses, 60), 2),
+      aboveSma50: last > sma(closes, 50)
+    };
+  }
+
+  const context = { benchmarkCloses, regime, sectorMomentum };
+
+  const rows = await pooledMap(universe, CONCURRENCY, async (symbol) => {
+    // Reuse anything already fetched as context rather than calling twice.
+    const candles = seriesBySymbol[symbol] || (await fetchCandles(symbol, apiKey));
 
     if (!candles) {
       return { symbol, rejected: "no data returned" };
     }
 
-    return analyze(symbol, candles);
+    return analyze(symbol, candles, context);
   });
 
   const errors = rows.filter((r) => r && r.error);
@@ -937,6 +1347,8 @@ exports.handler = async function (event) {
 
   const result = {
     generatedAt: new Date().toISOString(),
+    regime,
+    sectorMomentum,
     universeSize: universe.length,
     passed: candidates.length,
     rejected,
@@ -945,7 +1357,8 @@ exports.handler = async function (event) {
       classFloors: CLASS_FLOORS,
       minHistoryDays: MIN_HISTORY_DAYS,
       strongWatchScore: STRONG_WATCH_SCORE,
-      strongWatchMinLiquidityPoints: STRONG_WATCH_MIN_LIQUIDITY_POINTS
+      strongWatchMinLiquidityPoints: STRONG_WATCH_MIN_LIQUIDITY_POINTS,
+      blockerRules: EQUITY_BLOCKERS
     },
     strongWatchCount: candidates.filter(function (c) { return c.strongWatch; }).length,
     candidates
@@ -1035,7 +1448,8 @@ async function handleCrypto(params) {
       minVolume24h: CRYPTO_MIN_VOLUME,
       maxRank: CRYPTO_MAX_RANK,
       strongWatchScore: STRONG_WATCH_SCORE,
-      strongWatchMinLiquidityPoints: CRYPTO_STRONG_WATCH_MIN_LIQUIDITY
+      strongWatchMinLiquidityPoints: CRYPTO_STRONG_WATCH_MIN_LIQUIDITY,
+      blockerRules: CRYPTO_BLOCKERS
     },
     candidates
   };
@@ -1053,5 +1467,7 @@ async function handleCrypto(params) {
 exports._internal = {
   analyze, sma, atr, rsi, scale, inverseScale, piecewise, classify,
   scoreEquityLike, scoreCrypto, analyzeCrypto, estimateRange24h,
+  equityBlockers, cryptoBlockers, EQUITY_BLOCKERS, CRYPTO_BLOCKERS,
+  computeRegime, relativeStrength, volumeQuality, SECTOR_MAP, BENCHMARK,
   CLASS_FLOORS, DEFAULT_UNIVERSE, STRONG_WATCH_SCORE
 };
