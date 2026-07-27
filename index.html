@@ -303,6 +303,12 @@
         Score out of 100 = Trend 35 (four moving-average tests) + Momentum 25
         (RSI band 15, 20-day return 10) + Liquidity 20 (avg dollar volume) +
         Risk 20 (inverse volatility 12, inverse drawdown 8).
+        <br /><br />
+        <strong>Strong Watch</strong> requires all three: score 75+, enough
+        liquidity, and no special risk rule triggered. Blockers withhold the
+        label outright rather than deducting points &mdash; a name in a violent
+        run earns more momentum than the risk bucket can ever deduct, so points
+        alone cannot catch it.
         <strong>Strong Watch</strong> means 75+ with acceptable liquidity &mdash;
         it is a flag to look closer, not a signal to buy. These weights are a
         judgement call with no backtest behind them, and every rule here is one
@@ -326,6 +332,10 @@
         <button id="forceScreenBtn" class="secondary">Force Refresh (ignore cache)</button>
       </div>
 
+      <div id="regimeBanner" class="status" style="margin-top:12px;">
+        Market regime unknown &mdash; run the screener.
+      </div>
+
       <div id="screenStatus" class="status">Not run yet.</div>
 
       <div class="table-wrap" style="margin-top: 14px;">
@@ -347,6 +357,11 @@
               <th class="right">Mom 20d</th>
               <th class="right">Mom 60d</th>
               <th class="right">RSI</th>
+              <th class="right">RS 60d</th>
+              <th>Sector</th>
+              <th class="right">Sect RS</th>
+              <th class="right">RiskAdj</th>
+              <th class="right">Vol Qual</th>
               <th class="right">RVOL</th>
               <th class="right">Range %</th>
               <th class="right">From High</th>
@@ -354,6 +369,7 @@
               <th class="right">$ Vol</th>
               <th>Stacked</th>
               <th class="right">Sugg. Stop</th>
+              <th>Blocked By</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -369,8 +385,9 @@
 
       <div class="warning" style="margin-bottom:14px;">
         Score /100 = Momentum 40 (24h 12 + 7d 15 + 30d 13) + Liquidity 30 +
-        Market cap 15 + Risk 15. Different model from equities because the
-        useful inputs differ. <strong>Crypto momentum mean-reverts hard</strong>
+        Market cap 15 + Risk 15. <strong>Strong Watch</strong> requires all
+        three: score 75+, enough liquidity, and no special risk rule triggered.
+        Different model from equities because the useful inputs differ. <strong>Crypto momentum mean-reverts hard</strong>
         &mdash; a coin scoring 90 has usually already made its move. Stablecoins
         are excluded. Data from CoinMarketCap, top 200 by market cap.
         <br /><br />
@@ -415,6 +432,7 @@
               <th class="right">24h Range*</th>
               <th class="right">Volume</th>
               <th class="right">Sugg. Stop</th>
+              <th>Blocked By</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -449,6 +467,7 @@
               <th>Added</th>
               <th>Symbol</th>
               <th>Class</th>
+              <th>Sector</th>
               <th class="right">Score</th>
               <th>Strong</th>
               <th class="right">Price</th>
@@ -1277,7 +1296,7 @@
 
         var emptyRow = document.createElement("tr");
         var emptyCell = document.createElement("td");
-        emptyCell.colSpan = 9;
+        emptyCell.colSpan = 10;
         emptyCell.textContent = "Nothing on the watchlist.";
         emptyCell.style.color = "#94a8c7";
         emptyRow.appendChild(emptyCell);
@@ -1288,10 +1307,54 @@
 
       var strong = list.filter(function (e) { return e.strongWatch; }).length;
 
-      statusEl.className = "status";
+      // ---- correlation exposure ----
+      //
+      // True correlation needs a price matrix this page does not hold. Sector
+      // and asset-class concentration is the cheap proxy, and at a $1,000
+      // account it catches the failure that actually matters: five positions
+      // that are really one bet.
+
+      var bySector = {};
+      var byClass = {};
+
+      for (var k = 0; k < list.length; k++) {
+        var sectorKey = list[k].sector || (list[k].assetClass === "crypto" ? "crypto" : "unclassified");
+        bySector[sectorKey] = (bySector[sectorKey] || 0) + 1;
+        byClass[list[k].assetClass] = (byClass[list[k].assetClass] || 0) + 1;
+      }
+
+      var warnings = [];
+
+      Object.keys(bySector).forEach(function (key) {
+        var share = bySector[key] / list.length;
+
+        if (list.length >= 3 && share >= 0.5 && key !== "unclassified") {
+          warnings.push(
+            bySector[key] + " of " + list.length + " in " + key +
+            " (" + Math.round(share * 100) + "%)"
+          );
+        }
+      });
+
+      Object.keys(byClass).forEach(function (key) {
+        var share = byClass[key] / list.length;
+
+        if (list.length >= 4 && share >= 0.75) {
+          warnings.push(
+            Math.round(share * 100) + "% of the watchlist is " + key
+          );
+        }
+      });
+
+      statusEl.className = warnings.length ? "status error" : "status";
       statusEl.textContent =
         list.length + " on watchlist (" + strong + " were Strong Watch when added). " +
-        "Set a TradingView alert on each, pasting its Alert JSON as the message body.";
+        "Set a TradingView alert on each, pasting its Alert JSON as the message body." +
+        (warnings.length
+          ? "\n\nCORRELATION EXPOSURE: " + warnings.join("; ") +
+            ".\nThese will tend to move together — sizing each as an independent " +
+            "position understates your real risk."
+          : "");
 
       for (var i = 0; i < list.length; i++) {
         var entry = list[i];
@@ -1301,6 +1364,7 @@
           new Date(entry.addedAt).toLocaleDateString(),
           entry.symbol,
           entry.assetClass || "",
+          entry.sector || "",
           entry.score === undefined ? "" : fmtNum(entry.score, 1),
           entry.strongWatch ? "yes" : "no",
           entry.price === undefined ? "" : fmtNum(entry.price, 2),
@@ -1312,8 +1376,8 @@
           var td = document.createElement("td");
           td.textContent = cells[c];
 
-          if (c === 3 || c === 5 || c === 6) td.className = "right";
-          if (c === 4) td.className = entry.strongWatch ? "long" : "";
+          if (c === 4 || c === 6 || c === 7) td.className = "right";
+          if (c === 5) td.className = entry.strongWatch ? "long" : "";
 
           tr.appendChild(td);
         }
@@ -1453,6 +1517,19 @@
       });
 
       statusEl.className = "status";
+      var regimeEl = $("regimeBanner");
+      var regime = data.regime;
+
+      if (regime) {
+        regimeEl.className = regime.state === "risk-off" ? "status error" : "status";
+        regimeEl.textContent =
+          "MARKET REGIME: " + regime.state.toUpperCase() +
+          "\n" + regime.reason +
+          (regime.state === "risk-off"
+            ? "\nEvery equity row is blocked from Strong Watch while the regime is risk-off."
+            : "");
+      }
+
       var floors = data.filters.classFloors || {};
 
       statusEl.textContent =
@@ -1462,6 +1539,8 @@
         (data.strongWatchCount || 0) + " on Strong Watch." +
         (data.cached ? "  (cached — use Force Refresh for new data)" : "") +
         "\nGenerated: " + new Date(data.generatedAt).toLocaleString() +
+        "\nStrong Watch = score 75+ AND liquidity AND no blocking rule " +
+        "(relative strength, sector, volume quality, risk-adjusted momentum, regime). " +
         "\nScore /100 = Trend 35 + Momentum 25 + Liquidity 20 + Risk 20. " +
         "Strong Watch needs " + data.filters.strongWatchScore + "+ AND at least " +
         data.filters.strongWatchMinLiquidityPoints + "/20 liquidity points." +
@@ -1475,7 +1554,7 @@
       if (!rows.length) {
         var emptyRow = document.createElement("tr");
         var emptyCell = document.createElement("td");
-        emptyCell.colSpan = 23;
+        emptyCell.colSpan = 30;
         emptyCell.textContent = "No candidates above the minimum score.";
         emptyCell.style.color = "#94a8c7";
         emptyRow.appendChild(emptyCell);
@@ -1488,7 +1567,11 @@
 
         var cells = [
           fmtNum(row.score, 1),
-          row.strongWatch ? "STRONG" : (row.liquidityOk ? "" : "thin"),
+          row.strongWatch
+            ? "STRONG"
+            : (row.blockers && row.blockers.length) ? "blocked"
+            : !row.liquidityOk ? "thin"
+            : "",
           row.symbol,
           row.assetClass,
           fmtNum(row.components.trend, 1),
@@ -1502,13 +1585,21 @@
           signedPct(row.mom20),
           signedPct(row.mom60),
           row.rsi14 === null || row.rsi14 === undefined ? "" : fmtNum(row.rsi14, 1),
+          signedPct(row.rs60),
+          row.sector || "",
+          row.sectorRs60 === null || row.sectorRs60 === undefined ? "" : signedPct(row.sectorRs60),
+          row.riskAdjMomentum === null || row.riskAdjMomentum === undefined
+            ? "" : fmtNum(row.riskAdjMomentum, 2),
+          row.volumeTrend === null || row.volumeTrend === undefined
+            ? "" : fmtNum(row.volumeTrend, 2),
           row.rvol === null ? "" : fmtNum(row.rvol, 2),
           row.rangePosition === null ? "" : fmtNum(row.rangePosition, 1),
           signedPct(row.pctFromHigh),
           row.atrPct === null ? "" : fmtNum(row.atrPct, 2) + "%",
           fmtDollarVolume(row.avgDollarVolume),
           row.stackedBullish ? "yes" : "no",
-          row.suggestedStop === null ? "" : fmtNum(row.suggestedStop, 2)
+          row.suggestedStop === null ? "" : fmtNum(row.suggestedStop, 2),
+          (row.blockers && row.blockers.length) ? row.blockers.join("; ") : ""
         ];
 
         for (var c = 0; c < cells.length; c++) {
@@ -1516,9 +1607,12 @@
           td.textContent = cells[c];
 
           // 0 score, 4-7 buckets, 8-18 numeric metrics.
-          if (c === 0 || (c >= 4 && c <= 19)) {
+          if (c === 0 || (c >= 4 && c <= 25)) {
             td.className = "right";
           }
+
+          // Sector ticker is text, not a number.
+          if (c === 16) td.className = "";
 
           // Colour the percentage columns by sign.
           if (c >= 9 && c <= 13) {
@@ -1542,8 +1636,30 @@
                                      : row.rsi14 > 72 ? "short" : "");
           }
 
-          if (c === 20) {
+          // Relative strength: negative is a blocker, so colour it.
+          if (c === 15 && row.rs60 != null && isFinite(row.rs60)) {
+            td.className = "right " + (row.rs60 >= 0 ? "long" : "short");
+          }
+
+          if (c === 17 && row.sectorRs60 != null && isFinite(row.sectorRs60)) {
+            td.className = "right " + (row.sectorRs60 >= 0 ? "long" : "short");
+          }
+
+          if (c === 18 && row.riskAdjMomentum != null && isFinite(row.riskAdjMomentum)) {
+            td.className = "right " + (row.riskAdjMomentum >= 1.5 ? "long" : "short");
+          }
+
+          if (c === 19 && row.volumeQualityOk === false) {
+            td.className = "right short";
+          }
+
+          if (c === 26) {
             td.className = row.stackedBullish ? "long" : "";
+          }
+
+          // Blocker reasons.
+          if (c === 28 && row.blockers && row.blockers.length) {
+            td.className = "short";
           }
 
           tr.appendChild(td);
@@ -1558,6 +1674,7 @@
         watchBtn.setAttribute("data-row", JSON.stringify({
           symbol: row.symbol,
           assetClass: row.assetClass,
+          sector: row.sector || null,
           score: row.score,
           price: row.price,
           suggestedStop: row.suggestedStop,
@@ -1704,7 +1821,7 @@
       if (!rows.length) {
         var emptyRow = document.createElement("tr");
         var emptyCell = document.createElement("td");
-        emptyCell.colSpan = 17;
+        emptyCell.colSpan = 18;
         emptyCell.textContent = "No candidates above the minimum score.";
         emptyCell.style.color = "#94a8c7";
         emptyRow.appendChild(emptyCell);
@@ -1717,7 +1834,11 @@
 
         var cells = [
           fmtNum(row.score, 1),
-          row.strongWatch ? "STRONG" : (row.liquidityOk ? "" : "thin"),
+          row.strongWatch
+            ? "STRONG"
+            : (row.blockers && row.blockers.length) ? "blocked"
+            : !row.liquidityOk ? "thin"
+            : "",
           row.symbol,
           row.name || "",
           fmtNum(row.components.momentum, 1),
@@ -1733,7 +1854,8 @@
             ? ""
             : fmtNum(row.range24hPct, 2) + "%" + (row.range24hEstimated ? "*" : ""),
           fmtBigDollar(row.volume24h),
-          row.suggestedStop === null ? "" : fmtCryptoPrice(row.suggestedStop)
+          row.suggestedStop === null ? "" : fmtCryptoPrice(row.suggestedStop),
+          (row.blockers && row.blockers.length) ? row.blockers.join("; ") : ""
         ];
 
         for (var c = 0; c < cells.length; c++) {
@@ -1760,6 +1882,10 @@
             td.className = "right short";
             td.title = "Parabolic penalty applied: -" +
               row.components.detail.parabolicPenalty;
+          }
+
+          if (c === 16 && row.blockers && row.blockers.length) {
+            td.className = "short";
           }
 
           tr.appendChild(td);
