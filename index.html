@@ -222,6 +222,26 @@
       position sizing, and trade journal.
     </p>
 
+    <div class="card" style="padding: 14px 18px; margin-bottom: 14px;">
+      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:13px;">
+        <span class="pill" id="stage1">1. Scanner finds candidates</span>
+        <span style="color:#94a8c7;">&rarr;</span>
+        <span class="pill" id="stage2">2. Watchlist &amp; TradingView confirm timing</span>
+        <span style="color:#94a8c7;">&rarr;</span>
+        <span class="pill" id="stage3">3. Netlify receives alerts</span>
+        <span style="color:#94a8c7;">&rarr;</span>
+        <span class="pill" id="stage4">4. You approve</span>
+        <span style="color:#94a8c7;">&rarr;</span>
+        <span class="pill" id="stage5">5. Risk controls size it</span>
+      </div>
+      <div class="small" style="color:#94a8c7; margin-top:10px; line-height:1.5;">
+        Work left to right. A trade should not enter the journal without having
+        passed through every stage &mdash; an alert on a symbol the scanner never
+        vetted is flagged <strong>UNVETTED</strong> below, and that flag is the
+        point of the whole sequence.
+      </div>
+    </div>
+
     <div class="warning">
       Educational research tool. Not financial advice. No guarantee of profit.
       With a $1,000 account and 1% risk, your max loss per trade is $10.
@@ -277,6 +297,172 @@
     </div>
 
     <div class="card">
+      <h2>Screener &mdash; Ranked Candidates</h2>
+
+      <div class="warning" style="margin-bottom: 14px;">
+        Score out of 100 = Trend 35 (four moving-average tests) + Momentum 25
+        (RSI band 15, 20-day return 10) + Liquidity 20 (avg dollar volume) +
+        Risk 20 (inverse volatility 12, inverse drawdown 8).
+        <strong>Strong Watch</strong> means 75+ with acceptable liquidity &mdash;
+        it is a flag to look closer, not a signal to buy. These weights are a
+        judgement call with no backtest behind them, and every rule here is one
+        that thousands of others also run. Do your own work before acting.
+      </div>
+
+      <div class="grid">
+        <label>
+          Symbols (comma separated, blank = default liquid universe)
+          <input id="screenSymbols" type="text" placeholder="AAPL,MSFT,NVDA" />
+        </label>
+
+        <label>
+          Minimum score to display
+          <input id="screenMinScore" type="number" value="0" min="0" max="100" step="5" />
+        </label>
+      </div>
+
+      <div class="buttons">
+        <button id="runScreenBtn">Run Screener</button>
+        <button id="forceScreenBtn" class="secondary">Force Refresh (ignore cache)</button>
+      </div>
+
+      <div id="screenStatus" class="status">Not run yet.</div>
+
+      <div class="table-wrap" style="margin-top: 14px;">
+        <table>
+          <thead>
+            <tr>
+              <th class="right">Score</th>
+              <th>Watch</th>
+              <th>Symbol</th>
+              <th>Class</th>
+              <th class="right">Trend /35</th>
+              <th class="right">Mom /25</th>
+              <th class="right">Liq /20</th>
+              <th class="right">Risk /20</th>
+              <th class="right">Price</th>
+              <th class="right">vs 20d</th>
+              <th class="right">vs 50d</th>
+              <th class="right">vs 200d</th>
+              <th class="right">Mom 20d</th>
+              <th class="right">Mom 60d</th>
+              <th class="right">RSI</th>
+              <th class="right">RVOL</th>
+              <th class="right">Range %</th>
+              <th class="right">From High</th>
+              <th class="right">ATR %</th>
+              <th class="right">$ Vol</th>
+              <th>Stacked</th>
+              <th class="right">Sugg. Stop</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="screenBody"></tbody>
+        </table>
+      </div>
+
+      <div id="screenRejected" class="status" style="margin-top: 10px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>Crypto Screener &mdash; Ranked Candidates</h2>
+
+      <div class="warning" style="margin-bottom:14px;">
+        Score /100 = Momentum 40 (24h 12 + 7d 15 + 30d 13) + Liquidity 30 +
+        Market cap 15 + Risk 15. Different model from equities because the
+        useful inputs differ. <strong>Crypto momentum mean-reverts hard</strong>
+        &mdash; a coin scoring 90 has usually already made its move. Stablecoins
+        are excluded. Data from CoinMarketCap, top 200 by market cap.
+        <br /><br />
+        <strong>Range is estimated.</strong> CoinMarketCap's free tier has no
+        OHLCV, so the 24h high/low the Risk bucket needs is inferred from the 1h
+        and 24h percentage moves rather than measured. Risk scores are therefore
+        approximate, and the estimate runs slightly wide &mdash; treat the Risk
+        column as a rough guide, not a number to act on.
+      </div>
+
+      <div class="grid">
+        <label>
+          Minimum score to display
+          <input id="cryptoMinScore" type="number" value="0" min="0" max="100" step="5" />
+        </label>
+      </div>
+
+      <div class="buttons">
+        <button id="runCryptoBtn">Run Crypto Screener</button>
+        <button id="forceCryptoBtn" class="secondary">Force Refresh</button>
+      </div>
+
+      <div id="cryptoStatus" class="status">Not run yet.</div>
+
+      <div class="table-wrap" style="margin-top:14px;">
+        <table>
+          <thead>
+            <tr>
+              <th class="right">Score</th>
+              <th>Watch</th>
+              <th>Symbol</th>
+              <th>Name</th>
+              <th class="right">Mom /40</th>
+              <th class="right">Liq /30</th>
+              <th class="right">Cap /15</th>
+              <th class="right">Risk /15</th>
+              <th class="right">Rank</th>
+              <th class="right">Price</th>
+              <th class="right">24h</th>
+              <th class="right">7d</th>
+              <th class="right">30d</th>
+              <th class="right">24h Range*</th>
+              <th class="right">Volume</th>
+              <th class="right">Sugg. Stop</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="cryptoBody"></tbody>
+        </table>
+      </div>
+
+      <div id="cryptoRejected" class="status" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>Watchlist &mdash; Vetted Candidates</h2>
+
+      <div class="small" style="color:#94a8c7; margin-bottom:12px; line-height:1.5;">
+        Stage 2. Promote screener candidates here, then set a TradingView alert
+        on each one so the chart decides <em>when</em>. The watchlist is what
+        makes an incoming alert trustworthy: signals for symbols that are not on
+        it get flagged.
+      </div>
+
+      <div class="buttons">
+        <button id="copyWatchSymbolsBtn" class="secondary">Copy Symbols</button>
+        <button id="clearWatchlistBtn" class="danger">Clear Watchlist</button>
+      </div>
+
+      <div id="watchStatus" class="status">Watchlist is empty.</div>
+
+      <div class="table-wrap" style="margin-top:12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Added</th>
+              <th>Symbol</th>
+              <th>Class</th>
+              <th class="right">Score</th>
+              <th>Strong</th>
+              <th class="right">Price</th>
+              <th class="right">Sugg. Stop</th>
+              <th>Alert JSON</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="watchBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Live TradingView Signals</h2>
 
       <div class="grid">
@@ -297,6 +483,7 @@
           <thead>
             <tr>
               <th>Time</th>
+              <th>Vetted</th>
               <th>Symbol</th>
               <th>Exchange</th>
               <th>Interval</th>
@@ -307,6 +494,7 @@
               <th class="right">Notional</th>
               <th class="right">% Capital</th>
               <th>Message</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody id="liveSignalsBody"></tbody>
@@ -973,6 +1161,673 @@
       renderManualSignals();
     }
 
+    // --------------------------------------------------------------- watchlist
+    //
+    // Stage 2 of the workflow, and the bridge between the scanner and the alert
+    // feed. Without it there is no way to tell a vetted signal from a random
+    // one, which is the whole discipline the pipeline is meant to enforce.
+
+    var WATCHLIST_KEY = "sce_watchlist_v1";
+
+    function loadWatchlist() {
+      try {
+        var raw = localStorage.getItem(WATCHLIST_KEY);
+        var parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function saveWatchlist(list) {
+      try {
+        localStorage.setItem(WATCHLIST_KEY, JSON.stringify(list));
+      } catch (error) {
+        console.error("Could not save watchlist:", error);
+      }
+    }
+
+    function isOnWatchlist(symbol) {
+      if (!symbol) return false;
+      var target = String(symbol).toUpperCase();
+      var list = loadWatchlist();
+
+      for (var i = 0; i < list.length; i++) {
+        if (String(list[i].symbol).toUpperCase() === target) return true;
+      }
+
+      return false;
+    }
+
+    function watchlistEntry(symbol) {
+      if (!symbol) return null;
+      var target = String(symbol).toUpperCase();
+      var list = loadWatchlist();
+
+      for (var i = 0; i < list.length; i++) {
+        if (String(list[i].symbol).toUpperCase() === target) return list[i];
+      }
+
+      return null;
+    }
+
+    function addToWatchlist(row) {
+      var list = loadWatchlist();
+      var target = String(row.symbol).toUpperCase();
+
+      for (var i = 0; i < list.length; i++) {
+        if (String(list[i].symbol).toUpperCase() === target) {
+          // Already present: refresh the snapshot rather than duplicating.
+          list[i] = { ...list[i], ...row, addedAt: list[i].addedAt };
+          saveWatchlist(list);
+          renderWatchlist();
+          return;
+        }
+      }
+
+      list.unshift({ ...row, addedAt: new Date().toISOString() });
+      saveWatchlist(list);
+      renderWatchlist();
+      renderLiveFromCache();
+    }
+
+    function removeFromWatchlist(symbol) {
+      var target = String(symbol).toUpperCase();
+
+      var list = loadWatchlist().filter(function (entry) {
+        return String(entry.symbol).toUpperCase() !== target;
+      });
+
+      saveWatchlist(list);
+      renderWatchlist();
+      renderLiveFromCache();
+    }
+
+    /**
+     * The exact JSON to paste into a TradingView alert message for this symbol.
+     * The stop is carried through from the screener so position sizing can run
+     * the moment the alert lands.
+     */
+    function alertJsonFor(entry) {
+      return JSON.stringify({
+        secret: "YOUR_TV_WEBHOOK_SECRET",
+        symbol: "{{ticker}}",
+        exchange: "{{exchange}}",
+        interval: "{{interval}}",
+        price: "{{close}}",
+        stop: entry.suggestedStop,
+        asset_class: entry.assetClass,
+        message: "watchlist confirm"
+      });
+    }
+
+    function renderWatchlist() {
+      var tbody = $("watchBody");
+      var statusEl = $("watchStatus");
+
+      tbody.innerHTML = "";
+
+      var list = loadWatchlist();
+
+      if (!list.length) {
+        statusEl.className = "status";
+        statusEl.textContent =
+          "Watchlist is empty. Run the screener and press Watch on the candidates " +
+          "worth setting an alert for.";
+
+        var emptyRow = document.createElement("tr");
+        var emptyCell = document.createElement("td");
+        emptyCell.colSpan = 9;
+        emptyCell.textContent = "Nothing on the watchlist.";
+        emptyCell.style.color = "#94a8c7";
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
+
+        return;
+      }
+
+      var strong = list.filter(function (e) { return e.strongWatch; }).length;
+
+      statusEl.className = "status";
+      statusEl.textContent =
+        list.length + " on watchlist (" + strong + " were Strong Watch when added). " +
+        "Set a TradingView alert on each, pasting its Alert JSON as the message body.";
+
+      for (var i = 0; i < list.length; i++) {
+        var entry = list[i];
+        var tr = document.createElement("tr");
+
+        var cells = [
+          new Date(entry.addedAt).toLocaleDateString(),
+          entry.symbol,
+          entry.assetClass || "",
+          entry.score === undefined ? "" : fmtNum(entry.score, 1),
+          entry.strongWatch ? "yes" : "no",
+          entry.price === undefined ? "" : fmtNum(entry.price, 2),
+          entry.suggestedStop === null || entry.suggestedStop === undefined
+            ? "" : fmtNum(entry.suggestedStop, 2)
+        ];
+
+        for (var c = 0; c < cells.length; c++) {
+          var td = document.createElement("td");
+          td.textContent = cells[c];
+
+          if (c === 3 || c === 5 || c === 6) td.className = "right";
+          if (c === 4) td.className = entry.strongWatch ? "long" : "";
+
+          tr.appendChild(td);
+        }
+
+        var jsonTd = document.createElement("td");
+        var jsonBtn = document.createElement("button");
+
+        jsonBtn.textContent = "Copy";
+        jsonBtn.className = "secondary";
+        jsonBtn.setAttribute("data-json", alertJsonFor(entry));
+
+        jsonBtn.addEventListener("click", function () {
+          var text = this.getAttribute("data-json");
+
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            this.textContent = "Copied";
+          } else {
+            window.prompt("Copy this into the TradingView alert message:", text);
+          }
+        });
+
+        jsonTd.appendChild(jsonBtn);
+        tr.appendChild(jsonTd);
+
+        var actionTd = document.createElement("td");
+        var removeBtn = document.createElement("button");
+
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "danger";
+        removeBtn.setAttribute("data-symbol", entry.symbol);
+
+        removeBtn.addEventListener("click", function () {
+          removeFromWatchlist(this.getAttribute("data-symbol"));
+        });
+
+        actionTd.appendChild(removeBtn);
+        tr.appendChild(actionTd);
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    function copyWatchSymbols() {
+      var list = loadWatchlist();
+
+      if (!list.length) return;
+
+      var text = list.map(function (e) { return e.symbol; }).join(",");
+
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+      } else {
+        window.prompt("Watchlist symbols:", text);
+      }
+
+      $("watchStatus").textContent = "Copied " + list.length + " symbols: " + text;
+    }
+
+    function clearWatchlist() {
+      if (!window.confirm("Clear the entire watchlist?")) return;
+      saveWatchlist([]);
+      renderWatchlist();
+      renderLiveFromCache();
+    }
+
+    // ---------------------------------------------------------------- screener
+
+    var lastScreenResult = null;
+
+    function fmtDollarVolume(value) {
+      if (!isFinite(value)) return "";
+      if (value >= 1e9) return "$" + (value / 1e9).toFixed(1) + "B";
+      if (value >= 1e6) return "$" + (value / 1e6).toFixed(0) + "M";
+      return "$" + fmtNum(value, 0);
+    }
+
+    function signedPct(value) {
+      if (value === null || !isFinite(value)) return "";
+      return (value > 0 ? "+" : "") + fmtNum(value, 2) + "%";
+    }
+
+    async function runScreener(force) {
+      var statusEl = $("screenStatus");
+      var btn = $("runScreenBtn");
+      var forceBtn = $("forceScreenBtn");
+
+      btn.disabled = true;
+      forceBtn.disabled = true;
+
+      statusEl.className = "status";
+      statusEl.textContent = "Running screener. This can take 10-20 seconds on a cold run.";
+
+      try {
+        var url = "/.netlify/functions/screener";
+        var params = [];
+
+        if (force) params.push("force=1");
+
+        var symbols = $("screenSymbols").value.trim();
+
+        if (symbols) {
+          params.push("symbols=" + encodeURIComponent(symbols));
+        }
+
+        if (params.length) url += "?" + params.join("&");
+
+        var res = await fetch(url);
+        var data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || ("HTTP " + res.status));
+        }
+
+        lastScreenResult = data;
+        renderScreenResults(data);
+      } catch (error) {
+        statusEl.className = "status error";
+        statusEl.textContent = "Screener failed: " + error.message;
+      } finally {
+        btn.disabled = false;
+        forceBtn.disabled = false;
+      }
+    }
+
+    function renderScreenResults(data) {
+      var tbody = $("screenBody");
+      var statusEl = $("screenStatus");
+      var rejectedEl = $("screenRejected");
+
+      tbody.innerHTML = "";
+
+      var minScore = parseFloat($("screenMinScore").value) || 0;
+
+      var rows = (data.candidates || []).filter(function (row) {
+        return row.score >= minScore;
+      });
+
+      statusEl.className = "status";
+      var floors = data.filters.classFloors || {};
+
+      statusEl.textContent =
+        "Scanned " + data.universeSize + " symbols. " +
+        data.passed + " passed the universe floors. " +
+        rows.length + " above score " + minScore + ". " +
+        (data.strongWatchCount || 0) + " on Strong Watch." +
+        (data.cached ? "  (cached — use Force Refresh for new data)" : "") +
+        "\nGenerated: " + new Date(data.generatedAt).toLocaleString() +
+        "\nScore /100 = Trend 35 + Momentum 25 + Liquidity 20 + Risk 20. " +
+        "Strong Watch needs " + data.filters.strongWatchScore + "+ AND at least " +
+        data.filters.strongWatchMinLiquidityPoints + "/20 liquidity points." +
+        "\nFloors — stock: $" + (floors.stock ? floors.stock.minPrice : "?") +
+        " / $" + (floors.stock ? floors.stock.minAvgDollarVolume / 1e6 : "?") + "M/day" +
+        "  |  penny: $" + (floors.penny ? floors.penny.minPrice : "?") +
+        " / $" + (floors.penny ? floors.penny.minAvgDollarVolume / 1e6 : "?") + "M/day" +
+        "  |  bond: $" + (floors.bond ? floors.bond.minPrice : "?") +
+        " / $" + (floors.bond ? floors.bond.minAvgDollarVolume / 1e6 : "?") + "M/day";
+
+      if (!rows.length) {
+        var emptyRow = document.createElement("tr");
+        var emptyCell = document.createElement("td");
+        emptyCell.colSpan = 23;
+        emptyCell.textContent = "No candidates above the minimum score.";
+        emptyCell.style.color = "#94a8c7";
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
+      }
+
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var tr = document.createElement("tr");
+
+        var cells = [
+          fmtNum(row.score, 1),
+          row.strongWatch ? "STRONG" : (row.liquidityOk ? "" : "thin"),
+          row.symbol,
+          row.assetClass,
+          fmtNum(row.components.trend, 1),
+          fmtNum(row.components.momentum, 1),
+          fmtNum(row.components.liquidity, 1),
+          fmtNum(row.components.risk, 1),
+          fmtNum(row.price, row.assetClass === "penny" ? 4 : 2),
+          signedPct(row.pctFrom20),
+          signedPct(row.pctFrom50),
+          signedPct(row.pctFrom200),
+          signedPct(row.mom20),
+          signedPct(row.mom60),
+          row.rsi14 === null || row.rsi14 === undefined ? "" : fmtNum(row.rsi14, 1),
+          row.rvol === null ? "" : fmtNum(row.rvol, 2),
+          row.rangePosition === null ? "" : fmtNum(row.rangePosition, 1),
+          signedPct(row.pctFromHigh),
+          row.atrPct === null ? "" : fmtNum(row.atrPct, 2) + "%",
+          fmtDollarVolume(row.avgDollarVolume),
+          row.stackedBullish ? "yes" : "no",
+          row.suggestedStop === null ? "" : fmtNum(row.suggestedStop, 2)
+        ];
+
+        for (var c = 0; c < cells.length; c++) {
+          var td = document.createElement("td");
+          td.textContent = cells[c];
+
+          // 0 score, 4-7 buckets, 8-18 numeric metrics.
+          if (c === 0 || (c >= 4 && c <= 19)) {
+            td.className = "right";
+          }
+
+          // Colour the percentage columns by sign.
+          if (c >= 9 && c <= 13) {
+            var raw = [row.pctFrom20, row.pctFrom50, row.pctFrom200,
+                       row.mom20, row.mom60][c - 9];
+
+            if (raw !== null && isFinite(raw)) {
+              td.className = "right " + (raw >= 0 ? "long" : "short");
+            }
+          }
+
+          // Strong Watch badge and thin-liquidity warning.
+          if (c === 1) {
+            td.className = row.strongWatch ? "long" : "short";
+            td.style.fontWeight = "700";
+          }
+
+          // RSI: green in the target band, amber-ish when stretched.
+          if (c === 14 && row.rsi14 != null) {
+            td.className = "right " + (row.rsi14 >= 55 && row.rsi14 <= 68 ? "long"
+                                     : row.rsi14 > 72 ? "short" : "");
+          }
+
+          if (c === 20) {
+            td.className = row.stackedBullish ? "long" : "";
+          }
+
+          tr.appendChild(td);
+        }
+
+        var actionTd = document.createElement("td");
+
+        var watchBtn = document.createElement("button");
+        watchBtn.textContent = isOnWatchlist(row.symbol) ? "On Watchlist" : "Watch";
+        watchBtn.className = "secondary";
+        watchBtn.disabled = isOnWatchlist(row.symbol);
+        watchBtn.setAttribute("data-row", JSON.stringify({
+          symbol: row.symbol,
+          assetClass: row.assetClass,
+          score: row.score,
+          price: row.price,
+          suggestedStop: row.suggestedStop,
+          strongWatch: row.strongWatch
+        }));
+
+        watchBtn.addEventListener("click", function () {
+          addToWatchlist(JSON.parse(this.getAttribute("data-row")));
+          this.textContent = "On Watchlist";
+          this.disabled = true;
+        });
+
+        actionTd.appendChild(watchBtn);
+
+        var sendBtn = document.createElement("button");
+        sendBtn.style.marginLeft = "6px";
+        sendBtn.textContent = "Send to Inbox";
+        sendBtn.className = "secondary";
+        sendBtn.setAttribute("data-symbol", row.symbol);
+        sendBtn.setAttribute("data-price", row.price);
+        sendBtn.setAttribute("data-stop", row.suggestedStop === null ? "" : row.suggestedStop);
+        sendBtn.setAttribute("data-score", row.score);
+        sendBtn.setAttribute("data-class", row.assetClass);
+
+        sendBtn.addEventListener("click", function () {
+          sendToInbox(
+            this.getAttribute("data-symbol"),
+            this.getAttribute("data-price"),
+            this.getAttribute("data-stop"),
+            this.getAttribute("data-score"),
+            this.getAttribute("data-class")
+          );
+        });
+
+        actionTd.appendChild(sendBtn);
+        tr.appendChild(actionTd);
+
+        tbody.appendChild(tr);
+      }
+
+      var rejected = data.rejected || [];
+      var errors = data.errors || [];
+
+      var notes = [];
+
+      if (rejected.length) {
+        notes.push(
+          "Filtered out (" + rejected.length + "): " +
+          rejected.map(function (r) { return r.symbol + " (" + r.reason + ")"; }).join(", ")
+        );
+      }
+
+      if (errors.length) {
+        notes.push(
+          "Errors (" + errors.length + "): " +
+          errors.map(function (e) { return e.symbol + " (" + e.error + ")"; }).join(", ")
+        );
+      }
+
+      rejectedEl.className = errors.length ? "status error" : "status";
+      rejectedEl.textContent = notes.join("\n");
+    }
+
+    // ----------------------------------------------------------- crypto screener
+
+    var lastCryptoResult = null;
+
+    function fmtBigDollar(value) {
+      if (!isFinite(value)) return "";
+      if (value >= 1e9) return "$" + (value / 1e9).toFixed(2) + "B";
+      if (value >= 1e6) return "$" + (value / 1e6).toFixed(0) + "M";
+      return "$" + fmtNum(value, 0);
+    }
+
+    function fmtCryptoPrice(value) {
+      if (!isFinite(value)) return "";
+      if (value >= 100) return fmtNum(value, 2);
+      if (value >= 1) return fmtNum(value, 4);
+      return fmtNum(value, 6);
+    }
+
+    async function runCryptoScreener(force) {
+      var statusEl = $("cryptoStatus");
+      var btn = $("runCryptoBtn");
+      var forceBtn = $("forceCryptoBtn");
+
+      btn.disabled = true;
+      forceBtn.disabled = true;
+
+      statusEl.className = "status";
+      statusEl.textContent = "Fetching crypto market data.";
+
+      try {
+        var url = "/.netlify/functions/screener?market=crypto";
+        if (force) url += "&force=1";
+
+        var res = await fetch(url);
+        var data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+
+        lastCryptoResult = data;
+        renderCryptoResults(data);
+      } catch (error) {
+        statusEl.className = "status error";
+        statusEl.textContent = "Crypto screener failed: " + error.message;
+      } finally {
+        btn.disabled = false;
+        forceBtn.disabled = false;
+      }
+    }
+
+    function renderCryptoResults(data) {
+      var tbody = $("cryptoBody");
+      var statusEl = $("cryptoStatus");
+      var rejectedEl = $("cryptoRejected");
+
+      tbody.innerHTML = "";
+
+      var minScore = parseFloat($("cryptoMinScore").value) || 0;
+
+      var rows = (data.candidates || []).filter(function (row) {
+        return row.score >= minScore;
+      });
+
+      statusEl.className = "status";
+      statusEl.textContent =
+        "Scanned " + data.universeSize + " coins. " +
+        data.passed + " passed the floors. " +
+        rows.length + " above score " + minScore + ". " +
+        (data.strongWatchCount || 0) + " on Strong Watch." +
+        (data.cached ? "  (cached — use Force Refresh)" : "") +
+        "\nGenerated: " + new Date(data.generatedAt).toLocaleString() +
+        "\nFloors: 24h volume >= $" + (data.filters.minVolume24h / 1e6) + "M, " +
+        "market cap rank <= " + data.filters.maxRank + ", stablecoins excluded." +
+        "\nStrong Watch needs " + data.filters.strongWatchScore + "+ AND at least " +
+        data.filters.strongWatchMinLiquidityPoints + "/30 liquidity points." +
+        "\nSource: CoinMarketCap" +
+        (data.usedApiKey ? " (API key)" : " (keyless public route)") +
+        (data.rangeEstimated
+          ? "  |  * 24h range is ESTIMATED from percentage moves, not measured."
+          : "");
+
+      if (!rows.length) {
+        var emptyRow = document.createElement("tr");
+        var emptyCell = document.createElement("td");
+        emptyCell.colSpan = 17;
+        emptyCell.textContent = "No candidates above the minimum score.";
+        emptyCell.style.color = "#94a8c7";
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
+      }
+
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var tr = document.createElement("tr");
+
+        var cells = [
+          fmtNum(row.score, 1),
+          row.strongWatch ? "STRONG" : (row.liquidityOk ? "" : "thin"),
+          row.symbol,
+          row.name || "",
+          fmtNum(row.components.momentum, 1),
+          fmtNum(row.components.liquidity, 1),
+          fmtNum(row.components.marketCap, 1),
+          fmtNum(row.components.risk, 1),
+          row.marketCapRank,
+          fmtCryptoPrice(row.price),
+          signedPct(row.ret24h),
+          signedPct(row.ret7d),
+          signedPct(row.ret30d),
+          row.range24hPct === null
+            ? ""
+            : fmtNum(row.range24hPct, 2) + "%" + (row.range24hEstimated ? "*" : ""),
+          fmtBigDollar(row.volume24h),
+          row.suggestedStop === null ? "" : fmtCryptoPrice(row.suggestedStop)
+        ];
+
+        for (var c = 0; c < cells.length; c++) {
+          var td = document.createElement("td");
+          td.textContent = cells[c];
+
+          if (c === 0 || (c >= 4 && c <= 15)) td.className = "right";
+
+          if (c >= 10 && c <= 12) {
+            var raw = [row.ret24h, row.ret7d, row.ret30d][c - 10];
+            if (raw !== null && isFinite(raw)) {
+              td.className = "right " + (raw >= 0 ? "long" : "short");
+            }
+          }
+
+          if (c === 1) {
+            td.className = row.strongWatch ? "long" : "short";
+            td.style.fontWeight = "700";
+          }
+
+          // Flag a parabolic run so the score is not read in isolation.
+          if (c === 7 && row.components.detail &&
+              row.components.detail.parabolicPenalty > 0) {
+            td.className = "right short";
+            td.title = "Parabolic penalty applied: -" +
+              row.components.detail.parabolicPenalty;
+          }
+
+          tr.appendChild(td);
+        }
+
+        var actionTd = document.createElement("td");
+        var watchBtn = document.createElement("button");
+
+        watchBtn.textContent = isOnWatchlist(row.symbol) ? "On Watchlist" : "Watch";
+        watchBtn.className = "secondary";
+        watchBtn.disabled = isOnWatchlist(row.symbol);
+        watchBtn.setAttribute("data-row", JSON.stringify({
+          symbol: row.symbol,
+          assetClass: "crypto",
+          score: row.score,
+          price: row.price,
+          suggestedStop: row.suggestedStop,
+          strongWatch: row.strongWatch
+        }));
+
+        watchBtn.addEventListener("click", function () {
+          addToWatchlist(JSON.parse(this.getAttribute("data-row")));
+          this.textContent = "On Watchlist";
+          this.disabled = true;
+        });
+
+        actionTd.appendChild(watchBtn);
+        tr.appendChild(actionTd);
+
+        tbody.appendChild(tr);
+      }
+
+      var rejected = data.rejected || [];
+
+      rejectedEl.className = "status";
+      rejectedEl.textContent = rejected.length
+        ? "Filtered out (" + rejected.length + "): " +
+          rejected.map(function (r) { return r.symbol + " (" + r.reason + ")"; }).join(", ")
+        : "";
+    }
+
+    /**
+     * Prefills the manual signal form from a screener row. The trade is NOT
+     * created: entry, stop and reason still have to be reviewed and confirmed.
+     */
+    function sendToInbox(symbol, price, stop, score, assetClass) {
+      $("signalSymbol").value = symbol;
+      $("signalEntry").value = price;
+
+      if (stop) {
+        $("signalStop").value = stop;
+      }
+
+      $("signalAssetClass").value = assetClass || "stock";
+      $("signalDirection").value = "long";
+      $("signalScore").value = Math.round(Number(score));
+      $("signalReason").value = "Screener candidate (score " + score + ")";
+
+      calculateAndShow();
+
+      $("signalSymbol").scrollIntoView({ behavior: "smooth", block: "center" });
+
+      $("signalStatus").className = "status";
+      $("signalStatus").textContent =
+        "Prefilled from screener. The suggested stop is 2x ATR below entry — " +
+        "review it against the actual chart before adding.";
+    }
+
     function renderJournalSummary(signals) {
       var el = $("journalSummary");
       if (!el) return;
@@ -1314,6 +2169,7 @@
 
         var signals = Array.isArray(data.signals) ? data.signals : [];
 
+        lastLiveSignals = signals;
         renderLiveSignals(signals);
 
         status.className = "status";
@@ -1340,7 +2196,7 @@
         var emptyRow = document.createElement("tr");
         var emptyCell = document.createElement("td");
 
-        emptyCell.colSpan = 11;
+        emptyCell.colSpan = 13;
         emptyCell.textContent = "No live TradingView signals yet.";
         emptyCell.style.color = "#94a8c7";
 
@@ -1360,7 +2216,7 @@
 
         var calc = null;
 
-        if (isFinite(signal.price) && isFinite(signal.stop)) {
+        if (isFinite(signal.price) && isFinite(signal.stop) && signal.stop) {
           calc = computePosition(
             signal.price,
             signal.stop,
@@ -1371,8 +2227,23 @@
 
         var tr = document.createElement("tr");
 
+        var vetted = isOnWatchlist(signal.symbol);
+        var entry = watchlistEntry(signal.symbol);
+
+        // A stop from the watchlist beats no stop at all, so sizing can still
+        // run when the alert payload omits one.
+        if ((!isFinite(signal.stop) || !signal.stop) && entry && entry.suggestedStop) {
+          calc = computePosition(
+            signal.price,
+            entry.suggestedStop,
+            signal.target,
+            assetClass
+          );
+        }
+
         var cells = [
           signalTime ? new Date(signalTime).toLocaleString() : "",
+          vetted ? "vetted" : "UNVETTED",
           signal.symbol || "",
           signal.exchange || "",
           signal.interval || "",
@@ -1389,15 +2260,100 @@
           var td = document.createElement("td");
           td.textContent = cells[c];
 
-          if (c >= 5 && c <= 9) {
+          if (c >= 6 && c <= 10) {
             td.className = "right";
+          }
+
+          // The vetted flag is the discipline mechanism, so make it loud.
+          if (c === 1) {
+            td.className = vetted ? "long" : "short";
+            td.style.fontWeight = "700";
           }
 
           tr.appendChild(td);
         }
 
+        var actionTd = document.createElement("td");
+        var reviewBtn = document.createElement("button");
+
+        reviewBtn.textContent = "Review";
+        reviewBtn.className = vetted ? "secondary" : "danger";
+        reviewBtn.setAttribute("data-signal", JSON.stringify({
+          symbol: signal.symbol,
+          price: signal.price,
+          stop: signal.stop || (entry ? entry.suggestedStop : null),
+          target: signal.target || null,
+          assetClass: assetClass,
+          vetted: vetted,
+          score: entry ? entry.score : null
+        }));
+
+        reviewBtn.addEventListener("click", function () {
+          reviewLiveSignal(JSON.parse(this.getAttribute("data-signal")));
+        });
+
+        actionTd.appendChild(reviewBtn);
+        tr.appendChild(actionTd);
+
         tbody.appendChild(tr);
       }
+    }
+
+    /**
+     * Stage 4. Moves a live alert into the manual inbox for approval. Nothing
+     * is committed here: the trade still has to be reviewed and added by hand.
+     */
+    function reviewLiveSignal(signal) {
+      if (!signal.vetted) {
+        var proceed = window.confirm(
+          signal.symbol + " is NOT on your watchlist.\n\n" +
+          "This alert skipped the scanner and the vetting stage. Reviewing it " +
+          "anyway means you are taking the trade on the alert alone.\n\n" +
+          "Continue to the inbox?"
+        );
+
+        if (!proceed) return;
+      }
+
+      $("signalSymbol").value = signal.symbol || "";
+      $("signalEntry").value = signal.price != null ? signal.price : "";
+
+      if (signal.stop != null) {
+        $("signalStop").value = signal.stop;
+      }
+
+      if (signal.target != null) {
+        $("signalTarget").value = signal.target;
+      }
+
+      $("signalAssetClass").value = signal.assetClass || "stock";
+
+      if (signal.score != null) {
+        $("signalScore").value = Math.round(Number(signal.score));
+      }
+
+      $("signalReason").value = signal.vetted
+        ? "Watchlist confirm (screener score " + signal.score + ")"
+        : "UNVETTED alert — not from screener";
+
+      calculateAndShow();
+
+      $("signalSymbol").scrollIntoView({ behavior: "smooth", block: "center" });
+
+      $("signalStatus").className = signal.vetted ? "status" : "status error";
+      $("signalStatus").textContent = signal.vetted
+        ? "Reviewed from watchlist alert. Check the levels, then Add Signal to approve."
+        : "WARNING: this symbol was never vetted by the screener. Consider passing.";
+    }
+
+    /**
+     * Re-renders live signals from the last fetch, so watchlist changes update
+     * the vetted flags without another network call.
+     */
+    var lastLiveSignals = [];
+
+    function renderLiveFromCache() {
+      if (lastLiveSignals.length) renderLiveSignals(lastLiveSignals);
     }
 
     $("capital").addEventListener("change", saveSettings);
@@ -1418,6 +2374,33 @@
     $("exportSignalsBtn").addEventListener("click", exportManualSignals);
     $("clearSignalsBtn").addEventListener("click", clearManualSignals);
     $("refreshLiveBtn").addEventListener("click", refreshLiveSignals);
+
+    $("copyWatchSymbolsBtn").addEventListener("click", copyWatchSymbols);
+    $("clearWatchlistBtn").addEventListener("click", clearWatchlist);
+
+    $("runCryptoBtn").addEventListener("click", function () {
+      runCryptoScreener(false);
+    });
+
+    $("forceCryptoBtn").addEventListener("click", function () {
+      runCryptoScreener(true);
+    });
+
+    $("cryptoMinScore").addEventListener("change", function () {
+      if (lastCryptoResult) renderCryptoResults(lastCryptoResult);
+    });
+
+    $("runScreenBtn").addEventListener("click", function () {
+      runScreener(false);
+    });
+
+    $("forceScreenBtn").addEventListener("click", function () {
+      runScreener(true);
+    });
+
+    $("screenMinScore").addEventListener("change", function () {
+      if (lastScreenResult) renderScreenResults(lastScreenResult);
+    });
     $("signalsKey").addEventListener("change", saveSettings);
 
     loadSettings();
@@ -1425,6 +2408,7 @@
     $("signalAssetClass").value = $("defaultAssetClass").value;
     $("signalDirection").value = $("defaultDirection").value;
 
+    renderWatchlist();
     renderManualSignals();
     refreshLiveSignals();
 
