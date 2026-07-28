@@ -1774,7 +1774,11 @@
         var res = await fetch(url);
         var data = await res.json();
 
-        if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+        if (!res.ok) {
+          var msg = data.error || ("HTTP " + res.status);
+          if (data.detail) msg += "\nDetail: " + data.detail;
+          throw new Error(msg);
+        }
 
         lastCryptoResult = data;
         renderCryptoResults(data);
